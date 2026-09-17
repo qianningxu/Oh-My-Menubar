@@ -55,6 +55,22 @@ public final class MenuBarStatusWidgetsController {
             ) { [weak self] _ in
                 MainActor.assumeIsolated { self?.refresh() }
             },
+            center.addObserver(
+                forName: NSWindow.didMoveNotification,
+                object: nil,
+                queue: .main
+            ) { [weak self] notification in
+                guard notification.object is MenuBarStatusWidgetPanel else { return }
+                Task { @MainActor in self?.refresh() }
+            },
+            center.addObserver(
+                forName: NSWindow.didResizeNotification,
+                object: nil,
+                queue: .main
+            ) { [weak self] notification in
+                guard notification.object is MenuBarStatusWidgetPanel else { return }
+                Task { @MainActor in self?.refresh() }
+            },
             NSWorkspace.shared.notificationCenter.addObserver(
                 forName: NSWorkspace.activeSpaceDidChangeNotification,
                 object: nil,
