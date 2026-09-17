@@ -1,10 +1,10 @@
 # Xcode project configuration. Managed by https://github.com/yonaskolb/XcodeGen
 # Xcode is only used to build the release App Bundle. Debug builds only use Swift Package Manager
 
-name: MyMenuBar
+name: OhMyMenubar
 
 packages:
-  MyMenuBarPackage:
+  OhMyMenubarPackage:
     path: .
 
 configs:
@@ -12,7 +12,7 @@ configs:
   Release: release
 
 targets:
-  MyMenuBar:
+  OhMyMenubar:
     type: application
     platform: macOS
     deploymentTarget: "13.0"
@@ -20,7 +20,7 @@ targets:
       - "Sources/MyMenuBarApp"
       - "resources"
     dependencies:
-      - package: MyMenuBarPackage
+      - package: OhMyMenubarPackage
         product: AppBundle
     # https://developer.apple.com/documentation/xcode/build-settings-reference
     settings:
@@ -36,11 +36,11 @@ targets:
         DEVELOPMENT_TEAM: ${XCODEGEN_WINMUX_DEVELOPMENT_TEAM}
       configs:
         Debug:
-          PRODUCT_NAME: My Menu Bar-Debug
-          PRODUCT_BUNDLE_IDENTIFIER: com.qianningxu.my-menu-bar.debug
+          PRODUCT_NAME: Oh-My-Menubar-Debug
+          PRODUCT_BUNDLE_IDENTIFIER: com.qianningxu.oh-my-menubar.debug
         Release:
-          PRODUCT_NAME: My Menu Bar
-          PRODUCT_BUNDLE_IDENTIFIER: com.qianningxu.my-menu-bar
+          PRODUCT_NAME: Oh-My-Menubar
+          PRODUCT_BUNDLE_IDENTIFIER: com.qianningxu.oh-my-menubar
           SWIFT_TREAT_WARNINGS_AS_ERRORS: YES
           GCC_TREAT_WARNINGS_AS_ERRORS: YES
     entitlements:

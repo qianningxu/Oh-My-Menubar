@@ -4,7 +4,7 @@
 import PackageDescription
 
 let package = Package(
-    name: "MyMenuBarPackage",
+    name: "OhMyMenubarPackage",
     // Runtime support for parameterized protocol types is only available in macOS 13.0.0 or newer
     // And it specifies deploymentTarget for CLI
     platforms: [.macOS(.v13)],

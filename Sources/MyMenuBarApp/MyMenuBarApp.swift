@@ -18,10 +18,10 @@ struct MyMenuBarApp: App {
     @NSApplicationDelegateAdaptor(MyMenuBarAppDelegate.self) var appDelegate
 
     var body: some Scene {
-        MenuBarExtra("My Menu Bar", systemImage: "rectangle.topthird.inset.filled") {
-            Text("My Menu Bar")
+        MenuBarExtra("Oh-My-Menubar", systemImage: "rectangle.topthird.inset.filled") {
+            Text("Oh-My-Menubar")
             Divider()
-            Button("Quit My Menu Bar") { NSApp.terminate(nil) }
+            Button("Quit Oh-My-Menubar") { NSApp.terminate(nil) }
                 .keyboardShortcut("q", modifiers: .command)
         }
     }

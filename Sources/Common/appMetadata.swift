@@ -1,8 +1,8 @@
-public let stableWinMuxAppId: String = "com.zimengxiong.winmux"
+public let stableWinMuxAppId: String = "com.qianningxu.oh-my-menubar"
 #if DEBUG
-    public let winMuxAppId: String = "com.zimengxiong.winmux.debug"
-    public let winMuxAppName: String = "WinNotch-Debug"
+    public let winMuxAppId: String = "com.qianningxu.oh-my-menubar.debug"
+    public let winMuxAppName: String = "Oh-My-Menubar-Debug"
 #else
     public let winMuxAppId: String = stableWinMuxAppId
-    public let winMuxAppName: String = "WinNotch"
+    public let winMuxAppName: String = "Oh-My-Menubar"
 #endif
