@@ -62,6 +62,20 @@ public final class MenuBarStatusWidgetsController {
             ) { [weak self] _ in
                 MainActor.assumeIsolated { self?.refresh() }
             },
+            NSWorkspace.shared.notificationCenter.addObserver(
+                forName: NSWorkspace.screensDidWakeNotification,
+                object: nil,
+                queue: .main
+            ) { [weak self] _ in
+                MainActor.assumeIsolated { self?.refresh() }
+            },
+            NSWorkspace.shared.notificationCenter.addObserver(
+                forName: NSWorkspace.didWakeNotification,
+                object: nil,
+                queue: .main
+            ) { [weak self] _ in
+                MainActor.assumeIsolated { self?.refresh() }
+            },
         ]
         eventMonitors = [
             NSEvent.addGlobalMonitorForEvents(matching: .leftMouseDown) { [weak self] _ in
