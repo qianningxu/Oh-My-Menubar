@@ -1,0 +1,167 @@
+import AppKit
+import Common
+import Foundation
+
+@MainActor public func initAppBundle() {
+    restoreWorkspaceSidebarAppearancePreference()
+    Task {
+        beginStartupLayoutRestoration()
+        defer { finishStartupLayoutRestoration() }
+        initTerminationHandler()
+        isCli = false
+        initServerArgs()
+        var bootstrappedConfigUrl: URL? = nil
+        interceptTermination(SIGINT)
+        // SIGKILL cannot be intercepted. The development install loop and
+        // many launchers use SIGTERM; handle it so sidebar folders and their
+        // order are persisted before the process exits.
+        interceptTermination(SIGTERM)
+        if isDebug {
+            await toggleReleaseServerIfDebug(.off)
+        }
+        do {
+            bootstrappedConfigUrl = try ensureBootstrapConfigExistsIfNeeded()
+        } catch {
+            MessageModel.shared.message = Message(
+                description: "Config Bootstrap Error",
+                body: error.localizedDescription,
+            )
+        }
+        let startupConfigUrl = bootstrappedConfigUrl ?? findCustomConfigUrl().urlOrNil
+        if try await !reloadConfig(forceConfigUrl: bootstrappedConfigUrl) {
+            let failedConfigMessage = MessageModel.shared.message
+            var out = ""
+            check(
+                try await reloadConfig(forceConfigUrl: defaultConfigUrl, stdout: &out),
+                """
+                Can't load default config. Your installation is probably corrupted.
+                Please don't modify '\(defaultConfigUrl)'
+
+                \(out)
+                """,
+            )
+            if let startupConfigUrl {
+                configUrl = startupConfigUrl
+                syncConfigFileWatcher()
+            }
+            if let failedConfigMessage {
+                MessageModel.shared.message = startupFallbackMessage(
+                    failedConfigMessage,
+                    startupConfigUrl: startupConfigUrl,
+                )
+            }
+        }
+        MonitorConfigurationObserver.shared.prepareForStartup()
+
+        checkAccessibilityPermissions()
+        requestScreenRecordingPermissionsIfNeeded()
+        startUnixSocketServer()
+        GlobalObserver.initObserver()
+        MonitorConfigurationObserver.shared.startObserving()
+        Workspace.reconcileWorkspaceState() // init workspaces
+        _ = Workspace.all.first?.focusWorkspace()
+        let didLoadPersistedFrozenWorld = loadPersistedFrozenWorldForStartupIfPresent()
+        loadPersistedSidebarStateForStartupIfPresent()
+        // Recreate the saved tabs and folder membership before the AX scan.
+        // The scan can then attach windows to those durable tab identities,
+        // and a slow or failed scan cannot leave persistence disabled.
+        finalizePersistedSidebarStateAfterStartupIfNeeded()
+        try await runRefreshSessionBlocking(.startup, layoutWorkspaces: false)
+        try await runLightSession(.startup, .forceRun) {
+            if !didLoadPersistedFrozenWorld {
+                smartLayoutAtStartup()
+            }
+            _ = try await config.afterStartupCommand.runCmdSeq(.defaultEnv, .emptyStdin)
+        }
+        GlobalObserver.completeStartupRefreshAndSetWindowInventoryPollingEnabled(TrayMenuModel.shared.isEnabled)
+        if bootstrappedConfigUrl != nil {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                ShortcutSettingsModel.shared.requestWindowOpen()
+            }
+        }
+    }
+}
+
+private func startupFallbackMessage(_ message: Message, startupConfigUrl: URL?) -> Message {
+    let watchedConfig = startupConfigUrl?.path ?? "your custom config"
+    return Message(
+        type: message.type,
+        title: message.title,
+        description: message.description,
+        body: """
+        \(message.body)
+
+        WinMux loaded the default config so the app can keep running. Sidebar settings and other custom options may look like defaults until the config above parses successfully.
+
+        WinMux will keep watching \(watchedConfig) and will retry automatically when it changes.
+        """,
+    )
+}
+
+@MainActor
+private func smartLayoutAtStartup() {
+    let workspace = focus.workspace
+    let root = workspace.rootTilingContainer
+    root.layout = startupRootContainerLayoutForHardSidebarTabs(childCount: root.children.count)
+}
+
+func startupRootContainerLayoutForHardSidebarTabs(childCount _: Int) -> Layout {
+    .tiles
+}
+
+@TaskLocal
+var _isStartup: Bool? = false
+var isStartup: Bool { _isStartup ?? dieT("isStartup is not initialized") }
+
+struct ServerArgs: Sendable {
+    var configLocation: String? = nil
+    var isReadOnly: Bool = false
+}
+
+private let serverHelp = """
+    USAGE: \(CommandLine.arguments.first ?? "WinMux.app/Contents/MacOS/WinMux") [<options>]
+
+    OPTIONS:
+      -h, --help              Print help
+      -v, --version           Print WinMux.app version
+      --config-path <path>    Config path. It will take priority over ~/.config/winmux/winmux.toml,
+                              ~/.winmux.toml and ${XDG_CONFIG_HOME}/winmux/winmux.toml
+      --read-only             Run without mutating macOS windows.
+                              Useful if you want to use only debug-windows or other query commands.
+    """
+
+nonisolated(unsafe) private var _serverArgs = ServerArgs()
+var serverArgs: ServerArgs { _serverArgs }
+private func initServerArgs() {
+    let args = CommandLine.arguments.slice(1...) ?? []
+    if args.contains(where: { $0 == "-h" || $0 == "--help" }) {
+        exit(0, out: serverHelp)
+    }
+    var index = 0
+    while index < args.count {
+        let current = args[index]
+        index += 1
+        switch current {
+            case "--version", "-v":
+                exit(0, out: "\(winMuxAppVersion) \(gitHash)")
+            case "--config-path":
+                if let arg = args.getOrNil(atIndex: index) {
+                    _serverArgs.configLocation = arg
+                } else {
+                    exit(1, err: "Missing <path> in --config-path flag")
+                }
+                index += 1
+            case "--read-only": // todo rename to '--disabled' and unite with disabled feature
+                _serverArgs.isReadOnly = true
+            case "-NSDocumentRevisionsDebugMode" where isDebug:
+                // Skip Xcode CLI args.
+                // Usually it's '-NSDocumentRevisionsDebugMode NO'/'-NSDocumentRevisionsDebugMode YES'
+                while args.getOrNil(atIndex: index)?.starts(with: "-") == false { index += 1 }
+            default:
+                exit(1, err: "Unrecognized flag '\(args.first.orDie())'")
+        }
+    }
+    if let path = serverArgs.configLocation, !FileManager.default.fileExists(atPath: path) {
+        exit(1, err: "\(path) doesn't exist")
+    }
+}

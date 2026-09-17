@@ -1,0 +1,73 @@
+import AppKit
+import Common
+
+open class Window: TreeNode, Hashable {
+    let windowId: UInt32
+    let app: any AbstractApp
+    var lastFloatingSize: CGSize?
+    @MainActor var minimumSize: CGSize? = nil
+    var isFullscreen: Bool = false
+    var noOuterGapsInFullscreen: Bool = false
+    var layoutReason: LayoutReason = .standard
+    @MainActor var lastKnownActualRect: Rect? = nil
+
+    @MainActor
+    init(id: UInt32, _ app: any AbstractApp, lastFloatingSize: CGSize?, parent: NonLeafTreeNodeObject, adaptiveWeight: CGFloat, index: Int) {
+        self.windowId = id
+        self.app = app
+        self.lastFloatingSize = lastFloatingSize
+        super.init(parent: parent, adaptiveWeight: adaptiveWeight, index: index)
+    }
+
+    @MainActor static func get(byId windowId: UInt32) -> Window? { // todo make non optional
+        isUnitTest
+            ? (Workspace.all.flatMap { $0.allLeafWindowsRecursive } + globalFloatingWindowsContainer.allLeafWindowsRecursive).first(where: { $0.windowId == windowId })
+            : MacWindow.allWindowsMap[windowId]
+    }
+
+    @MainActor
+    func closeAxWindow() { die("Not implemented") }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(windowId)
+    }
+
+    func getAxSize() async throws -> CGSize? { die("Not implemented") }
+    var title: String { get async throws { die("Not implemented") } }
+    var isMacosFullscreen: Bool { get async throws { false } }
+    var isMacosMinimized: Bool { get async throws { false } } // todo replace with enum MacOsWindowNativeState { normal, fullscreen, invisible }
+    var isHiddenInCorner: Bool { die("Not implemented") }
+    @MainActor
+    func nativeFocus() { die("Not implemented") }
+    func getAxRect() async throws -> Rect? { die("Not implemented") }
+    func getCenter() async throws -> CGPoint? { try await getAxRect()?.center }
+
+    func setAxFrame(_ topLeft: CGPoint?, _ size: CGSize?) { die("Not implemented") }
+}
+
+enum LayoutReason: Codable, Equatable, Sendable {
+    case standard
+    /// Reason for the cur temp layout is macOS native fullscreen, minimize, or hide
+    case macos(prevParentKind: NonLeafTreeNodeKind, prevWorkspaceName: String?)
+}
+
+extension Window {
+    var isFloating: Bool { parent is Workspace || parent is GlobalFloatingWindowsContainer }
+
+    @discardableResult
+    @MainActor
+    func bindAsFloatingWindow(to workspace: Workspace) -> BindingData? {
+        bind(to: globalFloatingWindowsContainer, adaptiveWeight: WEIGHT_AUTO, index: INDEX_BIND_LAST)
+    }
+
+    @MainActor
+    func rememberMacOsLayoutOrigin(detachFromWorkspace: Bool = false) {
+        guard let parent else { return }
+        layoutReason = .macos(
+            prevParentKind: isFloating ? .workspace : parent.kind,
+            prevWorkspaceName: detachFromWorkspace ? nil : nodeWorkspace?.name,
+        )
+    }
+
+    func asMacWindow() -> MacWindow { self as! MacWindow }
+}

@@ -1,0 +1,29 @@
+import AppKit
+import Common
+
+struct MoveWorkspaceToMonitorCommand: Command {
+    let args: MoveWorkspaceToMonitorCmdArgs
+    /*conforms*/ let shouldResetClosedWindowsCache = true
+
+    func run(_ env: CmdEnv, _ io: CmdIo) -> Bool {
+        guard let target = args.resolveTargetOrReportError(env, io) else { return false }
+        let focusedWorkspace = target.workspace
+        let prevMonitor = focusedWorkspace.workspaceMonitor
+
+        switch args.target.val.resolve(target.workspace.workspaceMonitor, wrapAround: args.wrapAround) {
+            case .success(let targetMonitor):
+                if targetMonitor.monitorId_oneBased == prevMonitor.monitorId_oneBased {
+                    return true
+                }
+                if activateWorkspaceOnMonitorPreservingSourceViewport(focusedWorkspace, targetMonitor: targetMonitor) {
+                    return true
+                } else {
+                    return io.err(
+                        "Can't move Tab '\(workspaceDisplayName(focusedWorkspace.name))' to monitor '\(targetMonitor.name)'. tab-to-monitor-force-assignment doesn't allow it",
+                    )
+                }
+            case .failure(let msg):
+                return io.err(msg)
+        }
+    }
+}

@@ -1,0 +1,116 @@
+public func parseCmdArgs(_ args: StrArrSlice) -> ParsedCmd<any CmdArgs> {
+    let subcommand = String(args.first ?? "")
+    if subcommand.isEmpty {
+        return .failure("Can't parse empty string command")
+    }
+    if let subcommandParser: any SubCommandParserProtocol = subcommandParsers[subcommand] {
+        return subcommandParser.parse(args: args.slice(1...).orDie())
+    } else {
+        return .failure("Unrecognized subcommand '\(subcommand)'")
+    }
+}
+
+public protocol CmdArgs: ConvenienceCopyable, Equatable, CustomStringConvertible, WinMuxAny, Sendable {
+    static var parser: CmdParser<Self> { get }
+    var commonState: CmdArgsCommonState { get set }
+}
+
+public struct CmdArgsCommonState: ConvenienceCopyable, Equatable, Sendable {
+    let rawArgsForStrRepr: EquatableNoop<StrArrSlice>
+    var windowId: UInt32? = nil
+    var workspaceName: WorkspaceName? = nil
+
+    public init(_ raw: StrArrSlice) { rawArgsForStrRepr = .init(raw) }
+}
+
+extension CmdArgs {
+    public static var info: CmdStaticInfo { Self.parser.info }
+
+    public var windowId: UInt32? {
+        get { commonState.windowId }
+        set(value) { commonState.windowId = value }
+    }
+
+    public var workspaceName: WorkspaceName? {
+        get { commonState.workspaceName }
+        set(value) { commonState.workspaceName = value }
+    }
+
+    public func equals(_ other: any CmdArgs) -> Bool { // My brain is cursed with Java
+        (other as? Self).flatMap { self == $0 } ?? false
+    }
+
+    public var description: String {
+        let kind = switch Self.info.kind {
+            case .flattenWorkspaceTree:
+                "flatten-tab-tree"
+            case .listWorkspaces:
+                "list-tabs"
+            case .moveNodeToWorkspace:
+                "move-node-to-tab"
+            case .moveNodeToProject:
+                "move-node-to-folder"
+            case .moveWorkspaceToMonitor:
+                "move-tab-to-monitor"
+            case .project:
+                "folder"
+            case .reorderWorkspace:
+                "reorder-tab"
+            case .summonWorkspace:
+                "summon-tab"
+            case .workspace:
+                "tab"
+            case .workspaceBackAndForth:
+                "tab-back-and-forth"
+            default:
+                Self.info.kind.rawValue
+        }
+        return switch Self.info.kind {
+            case .execAndForget:
+                if let args = self as? ExecAndForgetCmdArgs {
+                    kind + " " + args.bashScript
+                } else {
+                    ([kind] + commonState.rawArgsForStrRepr.value.toArray()).joinArgs()
+                }
+            default:
+                ([kind] + commonState.rawArgsForStrRepr.value.toArray()).joinArgs()
+        }
+    }
+}
+
+public struct CmdParser<Root>: Sendable {
+    let info: CmdStaticInfo
+    let flags: [String: any ArgParserProtocol<SubArgParserInput, Root, ()>]
+    let positionalArgs: [any ArgParserProtocol<PosArgParserInput, Root, PosArgParserContext>]
+    let conflictingOptions: [Set<String>]
+
+    init(
+        kind: CmdKind,
+        allowInConfig: Bool,
+        help: String,
+        flags: [String: any ArgParserProtocol<SubArgParserInput, Root, ()>],
+        posArgs: [any ArgParserProtocol<PosArgParserInput, Root, PosArgParserContext>],
+        conflictingOptions: [Set<String>] = [],
+    ) {
+        self.info = CmdStaticInfo(help: help, kind: kind, allowInConfig: allowInConfig)
+        self.flags = flags
+        self.positionalArgs = posArgs
+        self.conflictingOptions = conflictingOptions
+    }
+}
+
+public struct CmdStaticInfo: Equatable, Sendable {
+    public let help: String
+    public let kind: CmdKind
+    public let allowInConfig: Bool // Query commands are prohibited in config
+
+    public init(
+        help: String,
+        kind: CmdKind,
+        allowInConfig: Bool,
+    ) {
+        self.help = help
+        self.kind = kind
+        self.allowInConfig = allowInConfig
+    }
+}

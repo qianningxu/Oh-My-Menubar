@@ -1,0 +1,28 @@
+import Common
+
+struct CmdEnv: ConvenienceCopyable {
+    var windowId: UInt32?
+    var workspaceName: String?
+
+    static let defaultEnv: CmdEnv = .init()
+    func withFocus(_ focus: LiveFocus) -> CmdEnv {
+        switch focus.asLeaf {
+            case .window(let wd): .defaultEnv
+                .copy(\.windowId, wd.windowId)
+                .copy(\.workspaceName, focus.workspace.name)
+            case .emptyWorkspace(let ws): .defaultEnv.copy(\.workspaceName, ws.name)
+        }
+    }
+
+    var asMap: [String: String] {
+        var result = [String: String]()
+        if let windowId {
+            result[WINMUX_WINDOW_ID] = windowId.description
+        }
+        if let workspaceName {
+            result[WINMUX_TAB] = workspaceName.description
+            result[WINMUX_WORKSPACE] = workspaceName.description
+        }
+        return result
+    }
+}

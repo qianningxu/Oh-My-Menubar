@@ -1,0 +1,207 @@
+import OrderedCollections
+
+private let workspace = "<tab>"
+private let workspaces = "\(workspace)..."
+
+public struct ListWindowsCmdArgs: CmdArgs, JsonFormattableListCmdArgs {
+    /*conforms*/ public var commonState: CmdArgsCommonState
+    public static let parser: CmdParser<Self> = .init(
+        kind: .listWindows,
+        allowInConfig: false,
+        help: list_windows_help_generated,
+        flags: [
+            "--all": trueBoolFlag(\.allAlias),
+
+            // Filtering flags
+            "--focused": trueBoolFlag(\.filteringOptions.focused),
+            "--monitor": ArgParser(\.filteringOptions.monitors, parseMonitorIds),
+            "--tab": ArgParser(\.filteringOptions.workspaces, parseWorkspaces),
+            "--workspace": ArgParser(\.filteringOptions.workspaces, parseWorkspaces),
+            "--pid": singleValueSubArgParser(\.filteringOptions.pidFilter, "<pid>", Int32.init),
+            "--app-bundle-id": singleValueSubArgParser(\.filteringOptions.appIdFilter, "<app-bundle-id>") { $0 },
+
+            // Formatting flags
+            "--format": formatParser(\._format, for: .window),
+            "--count": trueBoolFlag(\.outputOnlyCount),
+            "--json": trueBoolFlag(\.json),
+        ],
+        posArgs: [],
+        conflictingOptions: [
+            ["--all", "--focused", "--tab", "--workspace"],
+            ["--all", "--focused", "--monitor"],
+            ["--count", "--format"],
+            ["--count", "--json"],
+        ],
+    )
+
+    fileprivate var allAlias: Bool = false
+
+    public var filteringOptions = FilteringOptions()
+    public var _format: [StringInterToken] = []
+    public var outputOnlyCount: Bool = false
+    public var json: Bool = false
+
+    public struct FilteringOptions: ConvenienceCopyable, Equatable, Sendable {
+        public var monitors: [MonitorId] = []
+        public var focused: Bool = false
+        public var workspaces: [WorkspaceFilter] = []
+        public var pidFilter: Int32?
+        public var appIdFilter: String?
+    }
+}
+
+extension ListWindowsCmdArgs {
+    public var format: [StringInterToken] {
+        _format.isEmpty
+            ? [
+                .interVar("window-id"), .interVar("right-padding"), .literal(" | "),
+                .interVar("app-name"), .interVar("right-padding"), .literal(" | "),
+                .interVar("window-title"),
+            ]
+            : _format
+    }
+
+    public var jsonFormat: [StringInterToken] {
+        _format.isEmpty
+            ? [
+                .interVar("window-id"),
+                .interVar("app-name"),
+                .interVar("window-title"),
+                .interVar("tab"),
+            ]
+            : _format
+    }
+}
+
+func parseListWindowsCmdArgs(_ args: StrArrSlice) -> ParsedCmd<ListWindowsCmdArgs> {
+    let args = args.map { $0 == "--app-id" ? "--app-bundle-id" : $0 }.slice // Compatibility
+    return parseSpecificCmdArgs(ListWindowsCmdArgs(commonState: .init(args)), args)
+        .filter("Choose a window scope: --focused, --all, --monitor, or --tab (legacy --workspace is still accepted)") { raw in
+            raw.filteringOptions.focused || raw.allAlias || !raw.filteringOptions.monitors.isEmpty || !raw.filteringOptions.workspaces.isEmpty
+        }
+        .filter("--all conflicts with \"filtering\" flags. Please use '--monitor all' instead of '--all' alias") { raw in
+            raw.allAlias.implies(raw.filteringOptions == ListWindowsCmdArgs.FilteringOptions())
+        }
+        .filter("--focused conflicts with other \"filtering\" flags") { raw in
+            raw.filteringOptions.focused.implies(raw.filteringOptions.copy(\.focused, false) == ListWindowsCmdArgs.FilteringOptions())
+        }
+        .map { raw in
+            raw.allAlias ? raw.copy(\.filteringOptions.monitors, [.all]).copy(\.allAlias, false) : raw // Normalize alias
+        }
+        .validateJsonFormat()
+}
+
+func formatParser<Root>(
+    _ keyPath: SendableWritableKeyPath<Root, [StringInterToken]>,
+    for kind: FormatObjectKind,
+) -> SubArgParser<Root, [StringInterToken]> {
+    return ArgParser(keyPath) { input in
+        if let arg = input.nonFlagArgOrNil() {
+            return switch arg.interpolationTokens(interpolationChar: "%") {
+                case .success(let tokens): .succ(tokens, advanceBy: 1)
+                case .failure(let err): .fail("Failed to parse <output-format>. \(err)", advanceBy: 1)
+            }
+        } else {
+            let values = getAvailableInterVars(for: kind).joined(separator: "\n").prependLines("  ")
+            return .fail("<output-format> is mandatory. Possible values:\n\(values)", advanceBy: 0)
+        }
+    }
+}
+
+private func parseWorkspaces(input: SubArgParserInput) -> ParsedCliArgs<[WorkspaceFilter]> {
+    let args = input.nonFlagArgs()
+    let possibleValues = "\(workspace) possible values: (<tab-name>|focused|visible)"
+    if args.isEmpty {
+        return .fail("\(workspaces) is mandatory. \(possibleValues)", advanceBy: args.count)
+    }
+    var workspaces: [WorkspaceFilter] = []
+    var i = 0
+    for workspaceRaw in args {
+        switch workspaceRaw {
+            case "visible": workspaces.append(.visible)
+            case "focused": workspaces.append(.focused)
+            default:
+                switch WorkspaceName.parse(workspaceRaw) {
+                    case .success(let unwrapped): workspaces.append(.name(unwrapped))
+                    case .failure(let msg): return .fail(msg, advanceBy: i + 1)
+                }
+        }
+        i += 1
+    }
+    return .succ(workspaces, advanceBy: workspaces.count)
+}
+
+public enum WorkspaceFilter: Equatable, Sendable {
+    case focused
+    case visible
+    case name(WorkspaceName)
+}
+
+public enum FormatVar: Equatable {
+    case window(WindowFormatVar)
+    case workspace(WorkspaceFormatVar)
+    case app(AppFormatVar)
+    case monitor(MonitorFormatVar)
+
+    public enum WindowFormatVar: String, Equatable, CaseIterable {
+        case windowId = "window-id"
+        case windowIsFullscreen = "window-is-fullscreen"
+        case windowTitle = "window-title"
+        case windowLayout = "window-layout" // An alias for windowParentContainerLayout
+        case windowParentContainerLayout = "window-parent-container-layout"
+    }
+
+    public enum WorkspaceFormatVar: String, Equatable, CaseIterable {
+        case tabName = "tab"
+        case tabFocused = "tab-is-focused"
+        case tabVisible = "tab-is-visible"
+        case tabRootContainerLayout = "tab-root-container-layout"
+        case workspaceName = "workspace"
+        case workspaceFocused = "workspace-is-focused"
+        case workspaceVisible = "workspace-is-visible"
+        case workspaceRootContainerLayout = "workspace-root-container-layout"
+    }
+
+    public enum AppFormatVar: String, Equatable, CaseIterable {
+        case appBundleId = "app-bundle-id"
+        case appName = "app-name"
+        case appPid = "app-pid"
+        case appExecPath = "app-exec-path"
+        case appBundlePath = "app-bundle-path"
+    }
+
+    public enum MonitorFormatVar: String, Equatable, CaseIterable {
+        case monitorId_oneBased = "monitor-id"
+        case monitorAppKitNsScreenScreensId = "monitor-appkit-nsscreen-screens-id"
+        case monitorName = "monitor-name"
+        case monitorIsMain = "monitor-is-main"
+    }
+}
+
+public enum PlainInterVar: String, CaseIterable {
+    case rightPadding = "right-padding"
+    case newline = "newline"
+    case tab = "tab"
+}
+
+public enum FormatObjectKind: CaseIterable, Sendable {
+    case window, workspace, app, monitor
+}
+
+public func getAvailableInterVars(for kind: FormatObjectKind) -> [String] {
+    _getAvailableInterVars(for: kind) + PlainInterVar.allCases.map(\.rawValue)
+}
+
+private func _getAvailableInterVars(for kind: FormatObjectKind) -> [String] {
+    switch kind {
+        case .app: FormatVar.AppFormatVar.allCases.map(\.rawValue)
+        case .monitor: FormatVar.MonitorFormatVar.allCases.map(\.rawValue)
+        case .workspace:
+            FormatVar.WorkspaceFormatVar.allCases.map(\.rawValue) +
+                _getAvailableInterVars(for: .monitor)
+        case .window:
+            FormatVar.WindowFormatVar.allCases.map(\.rawValue) +
+                _getAvailableInterVars(for: .workspace) +
+                _getAvailableInterVars(for: .app)
+    }
+}

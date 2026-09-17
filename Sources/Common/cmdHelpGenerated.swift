@@ -1,0 +1,190 @@
+// FILE IS GENERATED FROM docs/winmux-*.adoc files
+// TO REGENERATE THE FILE RUN generate.sh
+
+let balance_sizes_help_generated = """
+    USAGE: balance-sizes [-h|--help] [--tab <tab>]
+    """
+let close_all_windows_but_current_help_generated = """
+    USAGE: close-all-windows-but-current [-h|--help] [--quit-if-last-window]
+    """
+let close_help_generated = """
+    USAGE: close [-h|--help] [--quit-if-last-window] [--window-id <window-id>]
+    """
+let config_help_generated = """
+    USAGE: config [-h|--help] --get <name> [--json] [--keys]
+       OR: config [-h|--help] --major-keys
+       OR: config [-h|--help] --all-keys
+       OR: config [-h|--help] --config-path
+    """
+let debug_windows_help_generated = """
+    USAGE: debug-windows [-h|--help] [--window-id <window-id>]
+    """
+let enable_help_generated = """
+    USAGE: enable [-h|--help] toggle
+       OR: enable [-h|--help] on [--fail-if-noop]
+       OR: enable [-h|--help] off [--fail-if-noop]
+    """
+let exec_and_forget_help_generated = """
+    USAGE: exec-and-forget <bash-script>
+    """
+let flatten_workspace_tree_help_generated = """
+    USAGE: flatten-tab-tree [-h|--help] [--tab <tab>]
+    """
+let focus_back_and_forth_help_generated = """
+    USAGE: focus-back-and-forth [-h|--help]
+    """
+let focus_monitor_help_generated = """
+    USAGE: focus-monitor [-h|--help] [--wrap-around] (left|down|up|right)
+       OR: focus-monitor [-h|--help] [--wrap-around] (next|prev)
+       OR: focus-monitor [-h|--help] <monitor-pattern>...
+    """
+let focus_help_generated = """
+    USAGE: focus [-h|--help] [--ignore-floating] [--wrap-around]
+                 [--boundaries <boundary>] [--boundaries-action <action>]
+                 (left|down|up|right)
+       OR: focus [-h|--help] [--ignore-floating] [--wrap-around]
+                 [--boundaries <boundary>] [--boundaries-action <action>]
+                 (dfs-next|dfs-prev)
+       OR: focus [-h|--help] [--ignore-floating] [--wrap-around]
+                 [--boundaries <boundary>] [--boundaries-action <action>]
+                 (tab-next|tab-prev|pane-next|pane-prev|stack-next|stack-prev)
+       OR: focus [-h|--help] --tab-index <tab-index>
+       OR: focus [-h|--help] --window-id <window-id>
+       OR: focus [-h|--help] --dfs-index <dfs-index>
+
+    Boundary values: tab, all-monitors-outer-frame. Legacy value: workspace.
+    pane-next/pane-prev switch panes, treating each window stack as one pane.
+    stack-next/stack-prev switch windows only inside the focused window stack.
+    """
+let fullscreen_help_generated = """
+    USAGE: fullscreen [-h|--help]     [--window-id <window-id>] [--no-outer-gaps]
+       OR: fullscreen [-h|--help] on  [--window-id <window-id>] [--no-outer-gaps] [--fail-if-noop]
+       OR: fullscreen [-h|--help] off [--window-id <window-id>] [--fail-if-noop]
+    """
+let join_with_help_generated = """
+    USAGE: join-with [-h|--help] [--window-id <window-id>] (left|down|up|right)
+    """
+let layout_help_generated = """
+    USAGE: layout [-h|--help] [--window-id <window-id>]
+                  (h_tiles|v_tiles|tiles|horizontal|vertical|tiling|floating)...
+    """
+let list_apps_help_generated = """
+    USAGE: list-apps [-h|--help] [--macos-native-hidden [no]] [--format <output-format>] [--count] [--json]
+    """
+let list_exec_env_vars_help_generated = """
+    USAGE: list-exec-env-vars [-h|--help]
+    """
+let list_modes_help_generated = """
+    USAGE: list-modes [-h|--help] [--current] [--count] [--json]
+    """
+let list_monitors_help_generated = """
+    USAGE: list-monitors [-h|--help] [--focused [no]] [--mouse [no]] [--format <output-format>] [--count] [--json]
+    """
+let list_windows_help_generated = """
+    USAGE: list-windows [-h|--help] (--tab <tab>...|--monitor <monitor>...)
+                        [--monitor <monitor>...] [--tab <tab>...]
+                        [--pid <pid>] [--app-bundle-id <app-bundle-id>] [--format <output-format>]
+                        [--count] [--json]
+       OR: list-windows [-h|--help] --all [--format <output-format>] [--count] [--json]
+       OR: list-windows [-h|--help] --focused [--format <output-format>] [--count] [--json]
+    """
+let list_workspaces_help_generated = """
+    USAGE: list-tabs [-h|--help] --monitor <monitor>... [--visible [no]] [--empty [no]] [--format <output-format>] [--count] [--json]
+       OR: list-tabs [-h|--help] --all [--format <output-format>] [--count] [--json]
+       OR: list-tabs [-h|--help] --focused [--format <output-format>] [--count] [--json]
+    """
+let macos_native_fullscreen_help_generated = """
+    USAGE: macos-native-fullscreen [-h|--help] [--window-id <window-id>]
+       OR: macos-native-fullscreen [-h|--help] [--window-id <window-id>] [--fail-if-noop] on
+       OR: macos-native-fullscreen [-h|--help] [--window-id <window-id>] [--fail-if-noop] off
+    """
+let macos_native_minimize_help_generated = """
+    USAGE: macos-native-minimize [-h|--help] [--window-id <window-id>]
+    """
+let mode_help_generated = """
+    USAGE: mode [-h|--help] <binding-mode>
+    """
+let move_mouse_help_generated = """
+    USAGE: move-mouse [-h|--help] [--fail-if-noop] <mouse-position>
+    """
+let move_node_to_monitor_help_generated = """
+    USAGE: move-node-to-monitor [-h|--help] [--window-id <window-id>] [--focus-follows-window]
+                                [--wrap-around] (left|down|up|right|next|prev)
+       OR: move-node-to-monitor [-h|--help] [--window-id <window-id>] [--focus-follows-window]
+                                [--fail-if-noop] <monitor-pattern>...
+    """
+let move_node_to_project_help_generated = """
+    USAGE: move-node-to-project [-h|--help] [--focus-follows-window]
+                                      [--fail-if-noop] [--window-id <window-id>]
+                                      (project-index|default)
+       OR: move-node-to-project [-h|--help] [--focus-follows-window]
+                                      [--wrap-around] (next|prev)
+
+    Move the focused window to a standalone trailing tab in the target project's Unfolded folder.
+    Legacy spelling: move-node-to-folder.
+    """
+let move_node_to_workspace_help_generated = """
+    USAGE: move-node-to-tab [-h|--help] [--focus-follows-window] [--wrap-around]
+                                  [--stdin|--no-stdin]
+                                  (next|prev)
+       OR: move-node-to-tab [-h|--help] [--focus-follows-window] [--fail-if-noop]
+                                  [--window-id <window-id>] <tab-name>
+    """
+let move_workspace_to_monitor_help_generated = """
+    USAGE: move-tab-to-monitor [-h|--help] [--tab <tab>] [--wrap-around] (left|down|up|right)
+       OR: move-tab-to-monitor [-h|--help] [--tab <tab>] [--wrap-around] (next|prev)
+       OR: move-tab-to-monitor [-h|--help] [--tab <tab>] <monitor-pattern>...
+    """
+let move_help_generated = """
+    USAGE: move [-h|--help] [--window-id <window-id>] [--boundaries <boundary>] [--boundaries-action <boundary-action>] (left|down|up|right)
+
+    Boundary values: tab, all-monitors-outer-frame. Legacy value: workspace.
+    """
+let project_help_generated = """
+    USAGE: project [-h|--help] [--fail-if-noop] (project-index|default)
+       OR: project [-h|--help] [--wrap-around] (next|prev)
+
+    Focus a project. Projects are numbered top to bottom in project-selector order.
+    Legacy spelling: folder.
+    """
+let reload_config_help_generated = """
+    USAGE: reload-config [-h|--help] [--no-gui] [--dry-run]
+    """
+let reorder_workspace_help_generated = """
+    USAGE: reorder-tab [-h|--help] <tab-name> (--before <tab-name>|--after <tab-name>)
+    """
+let resize_help_generated = """
+    USAGE: resize [-h|--help] [--window-id <window-id>] (smart|smart-opposite|width|height) [+|-]<number>
+    """
+let split_help_generated = """
+    USAGE: split [-h|--help] [--window-id <window-id>] (horizontal|vertical|opposite|1:2|1:1|2:1)
+    """
+let stack_with_help_generated = """
+    USAGE: stack-with [-h|--help] [--window-id <window-id>] (left|down|up|right)
+    """
+let subscribe_help_generated = """
+    USAGE: subscribe [-h|--help] [--all] [--no-send-initial] [<event>...]
+    """
+let summon_workspace_help_generated = """
+    USAGE: summon-tab [-h|--help] [--fail-if-noop] <tab>
+    """
+let swap_help_generated = """
+    USAGE: swap [-h|--help] [--window-id <window-id>] [--swap-focus]
+                [--wrap-around]
+                (left|down|up|right|dfs-next|dfs-prev)
+    """
+let trigger_binding_help_generated = """
+    USAGE: trigger-binding [-h|--help] <binding> --mode <mode-id>
+    """
+let volume_help_generated = """
+    USAGE: volume [-h|--help] (up|down) [--no-gui]
+       OR: volume [-h|--help] (mute-toggle|mute-off|mute-on) [--no-gui]
+       OR: volume [-h|--help] set <number> [--no-gui]
+    """
+let workspace_back_and_forth_help_generated = """
+    USAGE: tab-back-and-forth [-h|--help]
+    """
+let workspace_help_generated = """
+    USAGE: tab [-h|--help] [--auto-back-and-forth] [--fail-if-noop] <tab-name>
+       OR: tab [-h|--help] [--wrap-around] [--stdin|--no-stdin] (next|prev)
+    """

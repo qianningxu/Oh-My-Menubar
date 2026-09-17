@@ -1,0 +1,162 @@
+public enum CmdKind: String, CaseIterable, Equatable, Sendable {
+    // Sorted
+
+    case agent
+    case balanceSizes = "balance-sizes"
+    case close
+    case closeAllWindowsButCurrent = "close-all-windows-but-current"
+    case config
+    case debugWindows = "debug-windows"
+    case enable
+    case execAndForget = "exec-and-forget"
+    case flattenWorkspaceTree = "flatten-workspace-tree"
+    case focus
+    case focusBackAndForth = "focus-back-and-forth"
+    case focusMonitor = "focus-monitor"
+    case fullscreen
+    case joinWith = "join-with"
+    case layout
+    case listApps = "list-apps"
+    case listExecEnvVars = "list-exec-env-vars"
+    case listModes = "list-modes"
+    case listMonitors = "list-monitors"
+    case listWindows = "list-windows"
+    case listWorkspaces = "list-workspaces"
+    case macosNativeFullscreen = "macos-native-fullscreen"
+    case macosNativeMinimize = "macos-native-minimize"
+    case mode
+    case move = "move"
+    case moveMouse = "move-mouse"
+    case moveNodeToMonitor = "move-node-to-monitor"
+    case moveNodeToProject = "move-node-to-project"
+    case moveNodeToWorkspace = "move-node-to-workspace"
+    case moveWorkspaceToMonitor = "move-workspace-to-monitor"
+    case newTab = "new-tab"
+    case openSidebar = "open-sidebar"
+    case project
+    case reloadConfig = "reload-config"
+    case reorderWorkspace = "reorder-workspace"
+    case resize
+    case split
+    case stackWith = "stack-with"
+    case subscribe
+    case summonWorkspace = "summon-workspace"
+    case swap
+    case triggerBinding = "trigger-binding"
+    case volume
+    case workspace
+    case workspaceBackAndForth = "workspace-back-and-forth"
+}
+
+func initSubcommands() -> [String: any SubCommandParserProtocol] {
+    var result: [String: any SubCommandParserProtocol] = [:]
+    for kind in CmdKind.allCases {
+        switch kind {
+            case .agent:
+                result[kind.rawValue] = SubCommandParser(parseAgentCmdArgs)
+            case .balanceSizes:
+                result[kind.rawValue] = SubCommandParser(BalanceSizesCmdArgs.init)
+            case .close:
+                result[kind.rawValue] = SubCommandParser(CloseCmdArgs.init)
+            case .closeAllWindowsButCurrent:
+                result[kind.rawValue] = SubCommandParser(CloseAllWindowsButCurrentCmdArgs.init)
+            case .config:
+                result[kind.rawValue] = SubCommandParser(parseConfigCmdArgs)
+            case .debugWindows:
+                result[kind.rawValue] = SubCommandParser(DebugWindowsCmdArgs.init)
+            case .enable:
+                result[kind.rawValue] = SubCommandParser(parseEnableCmdArgs)
+            case .execAndForget:
+                break // exec-and-forget is parsed separately
+            case .flattenWorkspaceTree:
+                result[kind.rawValue] = SubCommandParser(FlattenWorkspaceTreeCmdArgs.init)
+                result["flatten-tab-tree"] = SubCommandParser(FlattenWorkspaceTreeCmdArgs.init)
+            case .focus:
+                result[kind.rawValue] = SubCommandParser(parseFocusCmdArgs)
+            case .focusBackAndForth:
+                result[kind.rawValue] = SubCommandParser(FocusBackAndForthCmdArgs.init)
+            case .focusMonitor:
+                result[kind.rawValue] = SubCommandParser(parseFocusMonitorCmdArgs)
+            case .fullscreen:
+                result[kind.rawValue] = SubCommandParser(parseFullscreenCmdArgs)
+            case .joinWith:
+                result[kind.rawValue] = SubCommandParser(JoinWithCmdArgs.init)
+            case .layout:
+                result[kind.rawValue] = SubCommandParser(parseLayoutCmdArgs)
+            case .listApps:
+                result[kind.rawValue] = SubCommandParser(parseListAppsCmdArgs)
+            case .listExecEnvVars:
+                result[kind.rawValue] = SubCommandParser(ListExecEnvVarsCmdArgs.init)
+            case .listModes:
+                result[kind.rawValue] = SubCommandParser(parseListModesCmdArgs)
+            case .listMonitors:
+                result[kind.rawValue] = SubCommandParser(parseListMonitorsCmdArgs)
+            case .listWindows:
+                result[kind.rawValue] = SubCommandParser(parseListWindowsCmdArgs)
+            case .listWorkspaces:
+                result[kind.rawValue] = SubCommandParser(parseListWorkspacesCmdArgs)
+                result["list-tabs"] = SubCommandParser(parseListWorkspacesCmdArgs)
+            case .macosNativeFullscreen:
+                result[kind.rawValue] = SubCommandParser(parseMacosNativeFullscreenCmdArgs)
+            case .macosNativeMinimize:
+                result[kind.rawValue] = SubCommandParser(MacosNativeMinimizeCmdArgs.init)
+            case .mode:
+                result[kind.rawValue] = SubCommandParser(ModeCmdArgs.init)
+            case .move:
+                result[kind.rawValue] = SubCommandParser(parseMoveCmdArgs)
+                // deprecated
+                result["move-through"] = SubCommandParser(parseMoveCmdArgs)
+            case .moveMouse:
+                result[kind.rawValue] = SubCommandParser(parseMoveMouseCmdArgs)
+            case .moveNodeToMonitor:
+                result[kind.rawValue] = SubCommandParser(parseMoveNodeToMonitorCmdArgs)
+            case .moveNodeToProject:
+                result[kind.rawValue] = SubCommandParser(parseMoveNodeToProjectCmdArgs)
+                result["move-node-to-folder"] = SubCommandParser(parseMoveNodeToProjectCmdArgs)
+            case .moveNodeToWorkspace:
+                result[kind.rawValue] = SubCommandParser(parseMoveNodeToWorkspaceCmdArgs)
+                result["move-node-to-tab"] = SubCommandParser(parseMoveNodeToWorkspaceCmdArgs)
+            case .moveWorkspaceToMonitor:
+                result[kind.rawValue] = SubCommandParser(parseWorkspaceToMonitorCmdArgs)
+                result["move-tab-to-monitor"] = SubCommandParser(parseWorkspaceToMonitorCmdArgs)
+                // deprecated
+                result["move-workspace-to-display"] = SubCommandParser(MoveWorkspaceToMonitorCmdArgs.init)
+            case .newTab:
+                result[kind.rawValue] = SubCommandParser(NewTabCmdArgs.init)
+            case .openSidebar:
+                result[kind.rawValue] = SubCommandParser(OpenSidebarCmdArgs.init)
+            case .project:
+                result[kind.rawValue] = SubCommandParser(parseProjectCmdArgs)
+                result["folder"] = SubCommandParser(parseProjectCmdArgs)
+            case .reloadConfig:
+                result[kind.rawValue] = SubCommandParser(ReloadConfigCmdArgs.init)
+            case .reorderWorkspace:
+                result[kind.rawValue] = SubCommandParser(parseReorderWorkspaceCmdArgs)
+                result["reorder-tab"] = SubCommandParser(parseReorderWorkspaceCmdArgs)
+            case .resize:
+                result[kind.rawValue] = SubCommandParser(parseResizeCmdArgs)
+            case .split:
+                result[kind.rawValue] = SubCommandParser(parseSplitCmdArgs)
+            case .stackWith:
+                result[kind.rawValue] = SubCommandParser(StackWithCmdArgs.init)
+            case .subscribe:
+                result[kind.rawValue] = SubCommandParser(parseSubscribeCmdArgs)
+            case .summonWorkspace:
+                result[kind.rawValue] = SubCommandParser(SummonWorkspaceCmdArgs.init)
+                result["summon-tab"] = SubCommandParser(SummonWorkspaceCmdArgs.init)
+            case .swap:
+                result[kind.rawValue] = SubCommandParser(parseSwapCmdArgs)
+            case .triggerBinding:
+                result[kind.rawValue] = SubCommandParser(parseTriggerBindingCmdArgs)
+            case .volume:
+                result[kind.rawValue] = SubCommandParser(VolumeCmdArgs.init)
+            case .workspace:
+                result[kind.rawValue] = SubCommandParser(parseWorkspaceCmdArgs)
+                result["tab"] = SubCommandParser(parseWorkspaceCmdArgs)
+            case .workspaceBackAndForth:
+                result[kind.rawValue] = SubCommandParser(WorkspaceBackAndForthCmdArgs.init)
+                result["tab-back-and-forth"] = SubCommandParser(WorkspaceBackAndForthCmdArgs.init)
+        }
+    }
+    return result
+}

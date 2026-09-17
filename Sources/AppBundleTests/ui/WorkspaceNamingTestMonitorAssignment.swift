@@ -1,0 +1,344 @@
+@testable import AppBundle
+import AppKit
+import Common
+import XCTest
+
+extension WorkspaceNamingTest {
+    func testMovingTabGroupWorkspaceToAnotherMonitorLeavesSourceMonitorOnDefaultTab() async throws {
+        let main = WorkspaceNamingTestMonitor(
+            monitorAppKitNsScreenScreensId: 1,
+            name: "Left",
+            rect: Rect(topLeftX: 0, topLeftY: 0, width: 1920, height: 1080),
+            visibleRect: Rect(topLeftX: 0, topLeftY: 0, width: 1920, height: 1080),
+            isMain: true,
+        )
+        let secondary = WorkspaceNamingTestMonitor(
+            monitorAppKitNsScreenScreensId: 2,
+            name: "Right",
+            rect: Rect(topLeftX: 1920, topLeftY: 0, width: 1920, height: 1080),
+            visibleRect: Rect(topLeftX: 1920, topLeftY: 0, width: 1920, height: 1080),
+            isMain: false,
+        )
+        setMonitorsForTests([main, secondary])
+        let project = createWorkspaceProject()
+        let projectWorkspace = try XCTUnwrap(switchWorkspaceProject(project.id, on: main))
+        _ = TestWindow.new(id: 601, parent: projectWorkspace.rootTilingContainer)
+        XCTAssertTrue(projectWorkspace.focusWorkspace())
+
+        var args = MoveWorkspaceToMonitorCmdArgs(rawArgs: [])
+        args.target = .initialized(.relative(.next))
+        let result = try await MoveWorkspaceToMonitorCommand(args: args).run(.defaultEnv, .emptyStdin)
+
+        assertEquals(result.exitCode, 0)
+        XCTAssertTrue(secondary.activeWorkspace === projectWorkspace)
+        XCTAssertEqual(main.activeWorkspace.projectId, project.id)
+        XCTAssertTrue(main.activeWorkspace !== projectWorkspace)
+    }
+
+    func testProjectFocusHoldIgnoresNativeFocusFromOtherProject() throws {
+        let defaultWorkspace = focus.workspace
+        let defaultWindow = TestWindow.new(id: 301, parent: defaultWorkspace.rootTilingContainer)
+        let project = createWorkspaceProject()
+        let projectWorkspace = createBlankWorkspace(projectId: project.id, monitor: mainMonitor)
+        projectWorkspace.markAsSidebarManaged()
+        XCTAssertTrue(projectWorkspace.focusWorkspace())
+
+        holdFocusOnWorkspaceProject(project.id, for: 60)
+        updateFocusCache(defaultWindow)
+
+        XCTAssertTrue(focus.workspace === projectWorkspace)
+
+        clearFocusOnWorkspaceProjectHold(project.id)
+        updateFocusCache(defaultWindow)
+
+        XCTAssertTrue(focus.workspace === defaultWorkspace)
+    }
+
+    func testSummoningTabGroupWorkspaceToFocusedMonitorLeavesSourceMonitorOnDefaultTab() async throws {
+        let main = WorkspaceNamingTestMonitor(
+            monitorAppKitNsScreenScreensId: 1,
+            name: "Left",
+            rect: Rect(topLeftX: 0, topLeftY: 0, width: 1920, height: 1080),
+            visibleRect: Rect(topLeftX: 0, topLeftY: 0, width: 1920, height: 1080),
+            isMain: true,
+        )
+        let secondary = WorkspaceNamingTestMonitor(
+            monitorAppKitNsScreenScreensId: 2,
+            name: "Right",
+            rect: Rect(topLeftX: 1920, topLeftY: 0, width: 1920, height: 1080),
+            visibleRect: Rect(topLeftX: 1920, topLeftY: 0, width: 1920, height: 1080),
+            isMain: false,
+        )
+        setMonitorsForTests([main, secondary])
+        let project = createWorkspaceProject()
+        let projectWorkspace = try XCTUnwrap(switchWorkspaceProject(project.id, on: secondary))
+        _ = TestWindow.new(id: 602, parent: projectWorkspace.rootTilingContainer)
+        let focusedWorkspace = Workspace.get(byName: "focused")
+        focusedWorkspace.markAsAutomaticallyNamed()
+        _ = TestWindow.new(id: 603, parent: focusedWorkspace.rootTilingContainer)
+        XCTAssertTrue(main.setActiveWorkspace(focusedWorkspace))
+        XCTAssertTrue(focusedWorkspace.focusWorkspace())
+
+        let result = try await parseCommand("summon-workspace \(projectWorkspace.name)").cmdOrDie
+            .run(.defaultEnv, .emptyStdin)
+
+        assertEquals(result.exitCode, 0)
+        XCTAssertTrue(main.activeWorkspace === projectWorkspace)
+        XCTAssertTrue(focus.workspace === projectWorkspace)
+        XCTAssertEqual(secondary.activeWorkspace.projectId, project.id)
+        XCTAssertTrue(secondary.activeWorkspace !== projectWorkspace)
+    }
+
+    func testWorkspaceToMonitorForceAssignmentRejectsWrongMonitor() {
+        let main = WorkspaceNamingTestMonitor(
+            monitorAppKitNsScreenScreensId: 1,
+            name: "Main",
+            rect: Rect(topLeftX: 0, topLeftY: 0, width: 1920, height: 1080),
+            visibleRect: Rect(topLeftX: 0, topLeftY: 0, width: 1920, height: 1080),
+            isMain: true,
+        )
+        let secondary = WorkspaceNamingTestMonitor(
+            monitorAppKitNsScreenScreensId: 2,
+            name: "Secondary",
+            rect: Rect(topLeftX: 1920, topLeftY: 0, width: 1920, height: 1080),
+            visibleRect: Rect(topLeftX: 1920, topLeftY: 0, width: 1920, height: 1080),
+            isMain: false,
+        )
+        setMonitorsForTests([main, secondary])
+        config.workspaceToMonitorForceAssignment["forced"] = [.sequenceNumber(2)]
+        let workspace = Workspace.get(byName: "forced")
+
+        XCTAssertFalse(main.setActiveWorkspace(workspace))
+        XCTAssertTrue(secondary.setActiveWorkspace(workspace))
+        XCTAssertTrue(secondary.activeWorkspace === workspace)
+    }
+
+    func testMoveTabToMonitorForceAssignmentErrorUsesTabConfigKey() async throws {
+        let main = WorkspaceNamingTestMonitor(
+            monitorAppKitNsScreenScreensId: 1,
+            name: "Main",
+            rect: Rect(topLeftX: 0, topLeftY: 0, width: 1920, height: 1080),
+            visibleRect: Rect(topLeftX: 0, topLeftY: 0, width: 1920, height: 1080),
+            isMain: true,
+        )
+        let secondary = WorkspaceNamingTestMonitor(
+            monitorAppKitNsScreenScreensId: 2,
+            name: "Secondary",
+            rect: Rect(topLeftX: 1920, topLeftY: 0, width: 1920, height: 1080),
+            visibleRect: Rect(topLeftX: 1920, topLeftY: 0, width: 1920, height: 1080),
+            isMain: false,
+        )
+        setMonitorsForTests([main, secondary])
+        config.workspaceToMonitorForceAssignment["forced"] = [.sequenceNumber(2)]
+        let workspace = Workspace.get(byName: "forced")
+        _ = TestWindow.new(id: 611, parent: workspace.rootTilingContainer)
+        XCTAssertTrue(secondary.setActiveWorkspace(workspace))
+        XCTAssertTrue(workspace.focusWorkspace())
+
+        let result = try await parseCommand("move-tab-to-monitor main").cmdOrDie
+            .run(.defaultEnv, .emptyStdin)
+
+        assertEquals(result.exitCode, 1)
+        assertEquals(result.stderr, [
+            "Can't move Tab 'forced' to monitor 'Main'. tab-to-monitor-force-assignment doesn't allow it",
+        ])
+    }
+
+    func testSummonTabForceAssignmentErrorUsesTabConfigKey() async throws {
+        let main = WorkspaceNamingTestMonitor(
+            monitorAppKitNsScreenScreensId: 1,
+            name: "Main",
+            rect: Rect(topLeftX: 0, topLeftY: 0, width: 1920, height: 1080),
+            visibleRect: Rect(topLeftX: 0, topLeftY: 0, width: 1920, height: 1080),
+            isMain: true,
+        )
+        let secondary = WorkspaceNamingTestMonitor(
+            monitorAppKitNsScreenScreensId: 2,
+            name: "Secondary",
+            rect: Rect(topLeftX: 1920, topLeftY: 0, width: 1920, height: 1080),
+            visibleRect: Rect(topLeftX: 1920, topLeftY: 0, width: 1920, height: 1080),
+            isMain: false,
+        )
+        setMonitorsForTests([main, secondary])
+        config.workspaceToMonitorForceAssignment["forced"] = [.sequenceNumber(2)]
+        let workspace = Workspace.get(byName: "forced")
+        let focusedWorkspace = Workspace.get(byName: "focused")
+        _ = TestWindow.new(id: 612, parent: workspace.rootTilingContainer)
+        _ = TestWindow.new(id: 613, parent: focusedWorkspace.rootTilingContainer)
+        XCTAssertTrue(secondary.setActiveWorkspace(workspace))
+        XCTAssertTrue(main.setActiveWorkspace(focusedWorkspace))
+        XCTAssertTrue(focusedWorkspace.focusWorkspace())
+
+        let result = try await parseCommand("summon-tab forced").cmdOrDie
+            .run(.defaultEnv, .emptyStdin)
+
+        assertEquals(result.exitCode, 1)
+        assertEquals(result.stderr, [
+            "Can't move Tab 'forced' to monitor 'Main'. tab-to-monitor-force-assignment doesn't allow it",
+        ])
+    }
+
+    func testReconcileMovesVisibleWorkspaceToNewForceAssignedMonitor() {
+        let main = WorkspaceNamingTestMonitor(
+            monitorAppKitNsScreenScreensId: 1,
+            name: "Main",
+            rect: Rect(topLeftX: 0, topLeftY: 0, width: 1920, height: 1080),
+            visibleRect: Rect(topLeftX: 0, topLeftY: 0, width: 1920, height: 1080),
+            isMain: true,
+        )
+        let secondary = WorkspaceNamingTestMonitor(
+            monitorAppKitNsScreenScreensId: 2,
+            name: "Secondary",
+            rect: Rect(topLeftX: 1920, topLeftY: 0, width: 1920, height: 1080),
+            visibleRect: Rect(topLeftX: 1920, topLeftY: 0, width: 1920, height: 1080),
+            isMain: false,
+        )
+        setMonitorsForTests([main, secondary])
+        let workspace = Workspace.get(byName: "forced")
+        _ = TestWindow.new(id: 214, parent: workspace.rootTilingContainer)
+        XCTAssertTrue(main.setActiveWorkspace(workspace))
+        config.workspaceToMonitorForceAssignment[workspace.name] = [.sequenceNumber(2)]
+
+        Workspace.reconcileWorkspaceState()
+
+        XCTAssertTrue(secondary.activeWorkspace === workspace)
+        XCTAssertFalse(main.activeWorkspace === workspace)
+        XCTAssertEqual(workspace.preferredMonitorPointForTesting, secondary.rect.topLeftCorner)
+    }
+
+    func testMonitorViewportFallbackIgnoresEmptyWorkspaceForcedToAnotherMonitor() {
+        let main = WorkspaceNamingTestMonitor(
+            monitorAppKitNsScreenScreensId: 1,
+            name: "Main",
+            rect: Rect(topLeftX: 0, topLeftY: 0, width: 1920, height: 1080),
+            visibleRect: Rect(topLeftX: 0, topLeftY: 0, width: 1920, height: 1080),
+            isMain: true,
+        )
+        let secondary = WorkspaceNamingTestMonitor(
+            monitorAppKitNsScreenScreensId: 2,
+            name: "Secondary",
+            rect: Rect(topLeftX: 1920, topLeftY: 0, width: 1920, height: 1080),
+            visibleRect: Rect(topLeftX: 1920, topLeftY: 0, width: 1920, height: 1080),
+            isMain: false,
+        )
+        setMonitorsForTests([main, secondary])
+        _ = TestWindow.new(id: 213, parent: focus.workspace.rootTilingContainer)
+        let forcedElsewhere = Workspace.get(byName: "forced")
+        config.workspaceToMonitorForceAssignment[forcedElsewhere.name] = [.sequenceNumber(2)]
+
+        let fallback = getOrCreateMonitorViewportFallbackWorkspace(projectId: workspaceProjectDefaultId, for: main)
+
+        XCTAssertFalse(fallback === forcedElsewhere)
+        XCTAssertEqual(fallback.workspaceMonitor.rect.topLeftCorner, main.rect.topLeftCorner)
+    }
+
+    func testGcMonitorsReconcilesChangedMonitorPointsWithSameMonitorCount() {
+        let oldMain = WorkspaceNamingTestMonitor(
+            monitorAppKitNsScreenScreensId: 1,
+            name: "Main",
+            rect: Rect(topLeftX: 0, topLeftY: 0, width: 1920, height: 1080),
+            visibleRect: Rect(topLeftX: 0, topLeftY: 0, width: 1920, height: 1080),
+            isMain: true,
+        )
+        let oldSecondary = WorkspaceNamingTestMonitor(
+            monitorAppKitNsScreenScreensId: 2,
+            name: "Secondary",
+            rect: Rect(topLeftX: 1920, topLeftY: 0, width: 1920, height: 1080),
+            visibleRect: Rect(topLeftX: 1920, topLeftY: 0, width: 1920, height: 1080),
+            isMain: false,
+        )
+        setMonitorsForTests([oldMain, oldSecondary])
+        let workspace = Workspace.get(byName: "visible")
+        _ = TestWindow.new(id: 21, parent: workspace.rootTilingContainer)
+        XCTAssertTrue(oldMain.setActiveWorkspace(workspace))
+
+        let newMain = WorkspaceNamingTestMonitor(
+            monitorAppKitNsScreenScreensId: 1,
+            name: "Main",
+            rect: Rect(topLeftX: 100, topLeftY: 0, width: 1920, height: 1080),
+            visibleRect: Rect(topLeftX: 100, topLeftY: 0, width: 1920, height: 1080),
+            isMain: true,
+        )
+        let newSecondary = WorkspaceNamingTestMonitor(
+            monitorAppKitNsScreenScreensId: 2,
+            name: "Secondary",
+            rect: Rect(topLeftX: 2020, topLeftY: 0, width: 1920, height: 1080),
+            visibleRect: Rect(topLeftX: 2020, topLeftY: 0, width: 1920, height: 1080),
+            isMain: false,
+        )
+        setMonitorsForTests([newMain, newSecondary])
+
+        gcMonitors()
+
+        XCTAssertTrue(newMain.activeWorkspace === workspace)
+    }
+
+    func testGcMonitorsIgnoresInactiveViewportsWhenPreservingVisibleWorkspace() {
+        let oldMain = WorkspaceNamingTestMonitor(
+            monitorAppKitNsScreenScreensId: 1,
+            name: "Main",
+            rect: Rect(topLeftX: 0, topLeftY: 0, width: 1920, height: 1080),
+            visibleRect: Rect(topLeftX: 0, topLeftY: 0, width: 1920, height: 1080),
+            isMain: true,
+        )
+        setMonitorsForTests([oldMain])
+        let visibleWorkspace = Workspace.get(byName: "visible")
+        _ = TestWindow.new(id: 22, parent: visibleWorkspace.rootTilingContainer)
+        XCTAssertTrue(oldMain.setActiveWorkspace(visibleWorkspace))
+        let inactiveWorkspace = Workspace.get(byName: "inactive")
+
+        let newMain = WorkspaceNamingTestMonitor(
+            monitorAppKitNsScreenScreensId: 1,
+            name: "Main",
+            rect: Rect(topLeftX: 100, topLeftY: 0, width: 1920, height: 1080),
+            visibleRect: Rect(topLeftX: 100, topLeftY: 0, width: 1920, height: 1080),
+            isMain: true,
+        )
+        setMonitorsForTests([newMain])
+
+        gcMonitors()
+
+        XCTAssertTrue(newMain.activeWorkspace === visibleWorkspace)
+        XCTAssertTrue(inactiveWorkspace.isEffectivelyEmpty)
+        XCTAssertFalse(inactiveWorkspace.isVisible)
+    }
+
+    func testMonitorViewportFallbackWorkspaceUsesActiveFolderWhenProjectsAreHardDisabled() throws {
+        let project = createWorkspaceProject()
+        let projectWorkspace = try XCTUnwrap(switchWorkspaceProject(project.id, on: mainMonitor))
+        XCTAssertTrue(projectWorkspace.isVisible)
+
+        let fallback = activateMonitorViewportFallbackWorkspaceForTests(on: mainMonitor)
+        XCTAssertEqual(fallback.projectId, project.id)
+        XCTAssertEqual(activeWorkspaceProjectId(for: mainMonitor), project.id)
+
+        Workspace.reconcileWorkspaceState()
+
+        XCTAssertEqual(activeWorkspaceProjectId(for: mainMonitor), project.id)
+        XCTAssertEqual(mainMonitor.activeWorkspace.projectId, project.id)
+        XCTAssertTrue(userFacingWorkspaces(Workspace.all, focusedWorkspace: focus.workspace).contains(mainMonitor.activeWorkspace))
+    }
+
+    func testClosingLastFolderWindowKeepsVisibleEmptySidebarFolder() throws {
+        let defaultWorkspace = Workspace.get(byName: "1")
+        defaultWorkspace.markAsAutomaticallyNamed()
+        _ = TestWindow.new(id: 19, parent: defaultWorkspace.rootTilingContainer)
+        let project = createWorkspaceProject()
+        let projectWorkspace = try XCTUnwrap(switchWorkspaceProject(project.id, on: mainMonitor))
+        let projectWindow = TestWindow.new(id: 20, parent: projectWorkspace.rootTilingContainer)
+
+        Workspace.reconcileWorkspaceState()
+        projectWindow.unbindFromParent()
+        Workspace.reconcileWorkspaceState()
+
+        XCTAssertTrue(Workspace.existing(byName: projectWorkspace.name) === projectWorkspace)
+        XCTAssertNotNil(winMuxWorkspaceState.workspaceFoldersById[project.unfoldedFolderId])
+        XCTAssertEqual(activeWorkspaceProjectId(for: mainMonitor), workspaceProjectDefaultId)
+        XCTAssertTrue(mainMonitor.activeWorkspace === defaultWorkspace)
+        XCTAssertEqual(
+            userFacingWorkspaces(Workspace.all, focusedWorkspace: focus.workspace)
+                .filter { $0.isVisible && !workspaceHasSidebarVisibleWindows($0) },
+            [],
+        )
+    }
+}

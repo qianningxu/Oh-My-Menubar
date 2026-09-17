@@ -1,0 +1,4 @@
+interface:
+  display_name: "Sidebar Widget Creation Skill"
+  short_description: "Add WinMux sidebar widgets in the root sidebar_widgets folder."
+  default_prompt: "Create a new WinMux sidebar widget using the project widget conventions."

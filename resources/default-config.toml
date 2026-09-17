@@ -1,0 +1,119 @@
+config-version = 3
+
+start-at-login = false
+auto-reload-config = true
+enable-projects = true
+enable-normalization-flatten-containers = true
+enable-normalization-opposite-orientation-for-nested-containers = true
+folder-padding = 30
+
+window-tabs.enabled = true
+window-tabs.height = 28
+
+default-root-container-layout = 'tiles'
+default-root-container-orientation = 'auto'
+
+on-focused-monitor-changed = ['move-mouse monitor-lazy-center']
+
+automatically-unhide-macos-hidden-apps = false
+auto-add-new-windows-to-folder = false
+shortcuts-preset = 'none'
+persistent-tabs = []
+on-mode-changed = []
+
+[key-mapping]
+    preset = 'qwerty'
+
+[gaps]
+    inner.horizontal = 8
+    inner.vertical = 8
+    outer.left = 8
+    outer.bottom = 8
+    outer.top = 8
+    outer.right = 8
+
+[tab-sidebar]
+    enabled = true
+    collapsed-width = 44
+    width = 212
+    # Omit monitor to show an independent tab bar on every display.
+    # Legacy monitor = 'main' is also treated as all displays for the tab bar.
+    # Use monitor = 1, 'secondary', 2, or a list to restrict it.
+    menu-bar-reserve-height = 36
+    folder-deletion-action = 'close-windows'
+    widgets = [
+        { id = 'time-date', type = 'built-in/time-date', enabled = false, show-date = true },
+        { id = 'today-focus', type = 'built-in/today-focus', enabled = true, entries-path = '/Users/side/Documents/now/my_app/self/self_data/data' },
+        { id = 'period-heatmap', type = 'built-in/period-heatmap', enabled = false, entries-path = '/Users/side/Documents/now/my_app/self/self_data/data' },
+        { id = 'toggl-week-focus', type = 'built-in/toggl-week-focus', enabled = false, entries-path = '/Users/side/Documents/now/my_app/self/self_data/data', target-date = '2026-09-13' },
+        { id = 'toggl-weekly-focus', type = 'built-in/toggl-weekly-focus', enabled = true, entries-path = '/Users/side/Documents/now/my_app/self/self_data/data', target-date = '2026-09-13' },
+    ]
+
+[mode.main.binding]
+    cmd-s = 'focus --wrap-around pane-next'
+    alt-s = 'focus --wrap-around stack-next'
+    ctrl-tab = []
+    ctrl-shift-tab = []
+    ctrl-f = 'open-sidebar'
+    alt-b = 'open-sidebar'
+    alt-space = 'layout horizontal vertical'
+    ctrl-alt-j = 'split 1:2'
+    ctrl-alt-k = 'split 1:1'
+    ctrl-alt-l = 'split 2:1'
+    alt-h = 'focus left'
+    alt-j = 'split 1:2'
+    alt-k = 'split 1:1'
+    alt-l = 'split 2:1'
+    alt-n = 'new-tab'
+    alt-p = 'focus dfs-prev'
+    alt-tab = 'tab next'
+    alt-shift-tab = 'tab prev'
+    alt-0 = 'tab 10'
+    alt-1 = 'tab 1'
+    alt-2 = 'tab 2'
+    alt-3 = 'tab 3'
+    alt-4 = 'tab 4'
+    alt-5 = 'tab 5'
+    alt-6 = 'tab 6'
+    alt-7 = 'tab 7'
+    alt-8 = 'tab 8'
+    alt-9 = 'tab 9'
+    alt-shift-h = 'move left'
+    alt-shift-j = 'move down'
+    alt-shift-k = 'move up'
+    alt-shift-l = 'move right'
+    alt-shift-t = 'layout floating tiling'
+    alt-shift-m = 'fullscreen'
+    alt-shift-n = 'move-node-to-tab new'
+    cmd-shift-h = 'join-with left'
+    cmd-shift-j = 'join-with down'
+    cmd-shift-k = 'join-with up'
+    cmd-shift-l = 'join-with right'
+    ctrl-cmd-shift-h = 'stack-with left'
+    ctrl-cmd-shift-j = 'stack-with down'
+    ctrl-cmd-shift-k = 'stack-with up'
+    ctrl-cmd-shift-l = 'stack-with right'
+    cmd-shift-i = 'balance-sizes'
+    alt-cmd-j = 'swap down'
+    alt-cmd-k = 'swap up'
+    ctrl-q = 'tab 11'
+    ctrl-w = 'tab 12'
+    ctrl-e = 'tab 13'
+    ctrl-r = 'tab 14'
+    ctrl-t = 'tab 15'
+    ctrl-h = 'tab prev'
+    ctrl-l = 'tab next'
+    cmd-ctrl-h = 'tab prev'
+    cmd-ctrl-l = 'tab next'
+    alt-shift-0 = 'move-node-to-tab 10'
+    alt-shift-1 = 'move-node-to-tab 1'
+    alt-shift-2 = 'move-node-to-tab 2'
+    alt-shift-3 = 'move-node-to-tab 3'
+    alt-shift-4 = 'move-node-to-tab 4'
+    alt-shift-5 = 'move-node-to-tab 5'
+    alt-shift-6 = 'move-node-to-tab 6'
+    alt-shift-7 = 'move-node-to-tab 7'
+    alt-shift-8 = 'move-node-to-tab 8'
+    alt-shift-9 = 'move-node-to-tab 9'
+    ctrl-shift-h = 'move-node-to-tab --focus-follows-window prev'
+    ctrl-shift-l = 'move-node-to-tab --focus-follows-window next'

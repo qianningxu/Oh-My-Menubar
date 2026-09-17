@@ -1,0 +1,130 @@
+import AppKit
+import Common
+
+func movedObs(_: AXObserver, ax: AXUIElement, notif: CFString, _: UnsafeMutableRawPointer?) {
+    let windowId = ax.containingWindowId()
+    let notif = notif as String
+    Task { @MainActor in
+        if shouldIgnoreMovedObsForCurrentDragSession(windowId: windowId) ||
+            WindowMouseInteractionOpacityController.shared.shouldSuppressObserverEvent(windowId: windowId) ||
+            shouldIgnoreAxObserverEventForPostDragSuppression(windowId: windowId, notif: notif)
+        {
+            return
+        }
+        guard let token: RunSessionGuard = .isServerEnabled else { return }
+        guard let windowId, let window = Window.get(byId: windowId), try await isManipulatedWithMouse(window) else {
+            scheduleRefreshSession(.ax(notif))
+            return
+        }
+        Task {
+            try checkCancellation()
+            try await runLightSession(.ax(notif), token) {
+                try await moveWithMouse(window)
+            }
+        }
+    }
+}
+
+@MainActor
+private func moveWithMouse(_ window: Window) async throws { // todo cover with tests
+    guard getCurrentMouseManipulationKind() != .resize else { return }
+    let baseRect = WindowMouseInteractionDriver.shared.pendingResizeCandidate.flatMap {
+        $0.windowId == window.windowId ? $0.observedRect : nil
+    } ?? window.lastAppliedLayoutPhysicalRect
+    if window.parent is TilingContainer,
+       let baseRect, let observedRect = try await window.getAxRect(),
+       nativeWindowSizeChangedForResize(from: baseRect, to: observedRect) {
+        WindowMouseInteractionDriver.shared.startResize(windowId: window.windowId)
+        return
+    }
+    guard getCurrentMouseManipulationKind() != .resize else { return }
+    syncClosedWindowsCacheToCurrentWorld()
+    guard let parent = window.parent else { return }
+    switch parent.cases {
+        case .workspace:
+            moveFloatingWindowWithMouse(window)
+        case .tilingContainer:
+            moveTilingWindow(window)
+        case .macosMinimizedWindowsContainer, .macosFullscreenWindowsContainer,
+             .macosPopupWindowsContainer, .macosHiddenAppsWindowsContainer:
+            return // Unconventional windows can't be moved with mouse
+    }
+}
+
+@MainActor
+func moveFloatingWindowWithMouse(_ window: Window) {
+    let targetWorkspace = MousePointerTracker.shared.currentSample.point.monitorApproximation.activeWorkspace
+    guard let parent = window.parent else { return }
+    if targetWorkspace != parent {
+        window.bindAsFloatingWindow(to: targetWorkspace)
+    }
+}
+
+@MainActor
+private func moveTilingWindow(_ window: Window) {
+    let subject = resolvedMouseDragSubject(for: window)
+    let didStartSession = beginWindowMoveWithMouseSessionIfNeeded(
+        windowId: window.windowId,
+        subject: subject,
+        detachOrigin: .window,
+        startedInSidebar: false,
+        anchorRect: resolvedDraggedWindowAnchorRect(for: window, subject: subject),
+        refreshActualRects: subject == .window,
+    )
+    if didStartSession, subject == .window {
+        window.lastAppliedLayoutPhysicalRect = nil
+    }
+    WindowMouseInteractionDriver.shared.startMove(
+        windowId: window.windowId,
+        subject: subject,
+        detachOrigin: .window,
+        startedInSidebar: false,
+    )
+}
+
+@MainActor
+func swapWindows(_ window1: Window, _ window2: Window) {
+    swapNodes(window1.moveNode, window2.moveNode)
+}
+
+@MainActor
+func swapNodes(_ node1: TreeNode, _ node2: TreeNode) {
+    if node1 == node2 { return }
+    guard let index1 = node1.ownIndex else { return }
+    guard let index2 = node2.ownIndex else { return }
+
+    if index1 < index2 {
+        let binding2 = node2.unbindFromParent()
+        let binding1 = node1.unbindFromParent()
+
+        node2.bind(to: binding1.parent, adaptiveWeight: binding1.adaptiveWeight, index: binding1.index)
+        node1.bind(to: binding2.parent, adaptiveWeight: binding2.adaptiveWeight, index: binding2.index)
+    } else {
+        let binding1 = node1.unbindFromParent()
+        let binding2 = node2.unbindFromParent()
+
+        node1.bind(to: binding2.parent, adaptiveWeight: binding2.adaptiveWeight, index: binding2.index)
+        node2.bind(to: binding1.parent, adaptiveWeight: binding1.adaptiveWeight, index: binding1.index)
+    }
+    node1.markAsMostRecentChild()
+}
+
+extension CGPoint {
+    @MainActor
+    func findIn(tree: TilingContainer, virtual: Bool) -> Window? {
+        let point = self
+        let target: TreeNode? = switch tree.layout {
+            case .tiles:
+                tree.children.first(where: {
+                    (virtual ? $0.lastAppliedLayoutVirtualRect : $0.lastAppliedLayoutPhysicalRect)?.contains(point) == true
+                })
+            case .tabGroup:
+                tree.mostRecentChild
+        }
+        guard let target else { return nil }
+        return switch target.tilingTreeNodeCasesOrDie() {
+            case .window(let window): window
+            case .tilingContainer(let container): findIn(tree: container, virtual: virtual)
+        }
+    }
+}
