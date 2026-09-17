@@ -40,6 +40,7 @@ private struct PersistedWorkspaceState: Decodable {
 @MainActor
 private final class WorkspaceMenuModel: ObservableObject {
     @Published private(set) var projects: [MenuProject] = []
+    @Published private var workspaceNameDrafts: [String: String] = [:]
 
     private let stateUrl = FileManager.default.homeDirectoryForCurrentUser
         .appending(path: "Library/Application Support/WinMux/sidebar-state.json")
@@ -70,22 +71,21 @@ private final class WorkspaceMenuModel: ObservableObject {
                 }
             )
         }
+        workspaceNameDrafts = projects
+            .flatMap(\.workspaces)
+            .reduce(into: [:]) { $0[$1.id] = $1.displayName }
     }
 
-    func promptToRename(_ workspace: MenuWorkspace) {
-        let field = NSTextField(string: workspace.displayName)
-        field.frame = NSRect(x: 0, y: 0, width: 260, height: 24)
+    func workspaceNameBinding(for workspace: MenuWorkspace) -> Binding<String> {
+        Binding(
+            get: { self.workspaceNameDrafts[workspace.id] ?? workspace.displayName },
+            set: { self.workspaceNameDrafts[workspace.id] = $0 }
+        )
+    }
 
-        let alert = NSAlert()
-        alert.messageText = "Name workspace"
-        alert.informativeText = "Choose the name shown in Oh-My-Menubar and the workspace switcher."
-        alert.accessoryView = field
-        alert.addButton(withTitle: "Save")
-        alert.addButton(withTitle: "Cancel")
-        alert.window.initialFirstResponder = field
-
-        guard alert.runModal() == .alertFirstButtonReturn else { return }
-        let displayName = field.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+    func commitRename(_ workspace: MenuWorkspace) {
+        let displayName = (workspaceNameDrafts[workspace.id] ?? workspace.displayName)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
         guard !displayName.isEmpty else { return }
 
         DistributedNotificationCenter.default().post(
@@ -127,11 +127,13 @@ struct MyMenuBarApp: App {
                     ForEach(workspaceMenuModel.projects) { project in
                         Menu(project.displayName) {
                             ForEach(project.workspaces) { workspace in
-                                Button {
-                                    workspaceMenuModel.promptToRename(workspace)
-                                } label: {
-                                    Label(workspace.displayName, systemImage: "pencil")
-                                }
+                                TextField(
+                                    "Workspace name",
+                                    text: workspaceMenuModel.workspaceNameBinding(for: workspace)
+                                )
+                                .textFieldStyle(.plain)
+                                .frame(width: 180)
+                                .onSubmit { workspaceMenuModel.commitRename(workspace) }
                             }
                         }
                     }
