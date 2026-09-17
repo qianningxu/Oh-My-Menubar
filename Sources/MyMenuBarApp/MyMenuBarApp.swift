@@ -9,15 +9,24 @@ private struct MenuWorkspace: Identifiable {
     var displayName: String
 }
 
+private struct MenuProject: Identifiable {
+    let id: String
+    let displayName: String
+    var workspaces: [MenuWorkspace]
+}
+
 private struct PersistedWorkspaceState: Decodable {
     let sidebar: Sidebar
 
     struct Sidebar: Decodable {
         let projects: [Project]
+        let projectLabels: [String: String]
         let workspaceLabels: [String: String]
     }
 
     struct Project: Decodable {
+        let id: String
+        let name: String
         let order: Int
         let folders: [Folder]
     }
@@ -30,7 +39,7 @@ private struct PersistedWorkspaceState: Decodable {
 
 @MainActor
 private final class WorkspaceMenuModel: ObservableObject {
-    @Published private(set) var workspaces: [MenuWorkspace] = []
+    @Published private(set) var projects: [MenuProject] = []
 
     private let stateUrl = FileManager.default.homeDirectoryForCurrentUser
         .appending(path: "Library/Application Support/WinMux/sidebar-state.json")
@@ -43,17 +52,24 @@ private final class WorkspaceMenuModel: ObservableObject {
         guard let data = try? Data(contentsOf: stateUrl),
               let state = try? JSONDecoder().decode(PersistedWorkspaceState.self, from: data)
         else {
-            workspaces = []
+            projects = []
             return
         }
 
         var seen: Set<String> = []
-        workspaces = state.sidebar.projects
-            .sorted { $0.order < $1.order }
-            .flatMap { $0.folders.sorted { $0.order < $1.order } }
-            .flatMap(\.workspaceNames)
-            .filter { seen.insert($0).inserted }
-            .map { MenuWorkspace(id: $0, displayName: state.sidebar.workspaceLabels[$0] ?? "Tab \($0)") }
+        projects = state.sidebar.projects.sorted { $0.order < $1.order }.map { project in
+            let workspaceNames = project.folders
+                .sorted { $0.order < $1.order }
+                .flatMap(\.workspaceNames)
+                .filter { seen.insert($0).inserted }
+            return MenuProject(
+                id: project.id,
+                displayName: state.sidebar.projectLabels[project.id] ?? project.name,
+                workspaces: workspaceNames.map {
+                    MenuWorkspace(id: $0, displayName: state.sidebar.workspaceLabels[$0] ?? "Tab \($0)")
+                }
+            )
+        }
     }
 
     func promptToRename(_ workspace: MenuWorkspace) {
@@ -77,8 +93,11 @@ private final class WorkspaceMenuModel: ObservableObject {
             object: nil,
             userInfo: ["workspaceName": workspace.id, "displayName": displayName]
         )
-        if let index = workspaces.firstIndex(where: { $0.id == workspace.id }) {
-            workspaces[index].displayName = displayName
+        for projectIndex in projects.indices {
+            if let workspaceIndex = projects[projectIndex].workspaces.firstIndex(where: { $0.id == workspace.id }) {
+                projects[projectIndex].workspaces[workspaceIndex].displayName = displayName
+                break
+            }
         }
     }
 }
@@ -100,17 +119,20 @@ struct MyMenuBarApp: App {
     @StateObject private var workspaceMenuModel = WorkspaceMenuModel()
 
     var body: some Scene {
-        MenuBarExtra("Oh-My-Menubar", systemImage: "rectangle.topthird.inset.filled") {
+        MenuBarExtra {
             Group {
-                Text("Workspaces")
-                if workspaceMenuModel.workspaces.isEmpty {
+                if workspaceMenuModel.projects.isEmpty {
                     Text("No workspaces found")
                 } else {
-                    ForEach(workspaceMenuModel.workspaces) { workspace in
-                        Button {
-                            workspaceMenuModel.promptToRename(workspace)
-                        } label: {
-                            Label(workspace.displayName, systemImage: "pencil")
+                    ForEach(workspaceMenuModel.projects) { project in
+                        Menu(project.displayName) {
+                            ForEach(project.workspaces) { workspace in
+                                Button {
+                                    workspaceMenuModel.promptToRename(workspace)
+                                } label: {
+                                    Label(workspace.displayName, systemImage: "pencil")
+                                }
+                            }
                         }
                     }
                 }
@@ -119,6 +141,9 @@ struct MyMenuBarApp: App {
                     .keyboardShortcut("q", modifiers: .command)
             }
             .onAppear { workspaceMenuModel.reload() }
+        } label: {
+            Text("oh!")
+                .font(.system(size: 13, weight: .semibold, design: .rounded))
         }
     }
 }
