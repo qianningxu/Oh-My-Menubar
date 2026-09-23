@@ -26,7 +26,7 @@ enum WinMuxBarStyle {
     static let workspaceTabCornerRadius = cornerRadius
     static let workspaceTabBarCornerRadius = cornerRadius + innerSpacing
     static let workspaceBarStrokeOpacity: CGFloat = 1
-    static let workspaceBarSurfaceOpacity: CGFloat = 0.25
+    static let workspaceBarSurfaceOpacity: CGFloat = 0.35
     static let workspaceBarStrokeColor = Color(nsColor: NSColor(calibratedWhite: 1, alpha: 1))
     static let workspaceBarShadowOpacity: CGFloat = 0.12
     static let workspaceBarShadowRadius = WinMuxSpacing.regular

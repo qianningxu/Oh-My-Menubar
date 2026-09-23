@@ -300,7 +300,7 @@ final class WinMuxOverlayPaletteTest: XCTestCase {
         XCTAssertEqual(WinMuxGlassStyle.clear.recipe.whiteTintOpacity, 0.20)
         XCTAssertEqual(WinMuxBarStyle.workspaceBarStrokeOpacity, 1)
         assertSameColor(NSColor(WinMuxBarStyle.workspaceBarStrokeColor), .white)
-        XCTAssertEqual(WinMuxGlassStyle.workspaceBar.surfaceOpacity(isDark: false), 0.25)
+        XCTAssertEqual(WinMuxGlassStyle.workspaceBar.surfaceOpacity(isDark: false), 0.35)
         XCTAssertEqual(WinMuxGlassStyle.windowBar.surfaceOpacity(isDark: false), 1)
         XCTAssertEqual(WinMuxBarStyle.workspaceTabUnfocusedTextOpacity, 0.50)
         XCTAssertEqual(WinMuxBarStyle.windowTabUnfocusedTextOpacity, 0.50)
