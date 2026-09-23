@@ -33,7 +33,8 @@ enum WinMuxBarStyle {
     static let workspaceBarShadowY = WinMuxSpacing.hairline
     static let workspaceBarShadowOutset = WinMuxSpacing.section
     static let topBarStrokeOpacity: CGFloat = 0
-    static let menuBarSurfaceOpacity: CGFloat = 0.10
+    static let menuBarLightSurfaceOpacity: CGFloat = 0.70
+    static let menuBarDarkSurfaceOpacity: CGFloat = 0.10
     static let dividerOpacity: CGFloat = 0.15
     static let workspaceTabUnfocusedTextOpacity: CGFloat = 0.50
     static let windowTabUnfocusedTextOpacity: CGFloat = 0.50
@@ -61,9 +62,9 @@ enum WinMuxGlassStyle {
     case windowBar
     case regular
 
-    var surfaceOpacity: CGFloat {
+    func surfaceOpacity(isDark: Bool) -> CGFloat {
         switch self {
-            case .clear: WinMuxBarStyle.menuBarSurfaceOpacity
+            case .clear: isDark ? WinMuxBarStyle.menuBarDarkSurfaceOpacity : WinMuxBarStyle.menuBarLightSurfaceOpacity
             case .workspaceBar: WinMuxBarStyle.workspaceBarSurfaceOpacity
             default: 1
         }
@@ -165,7 +166,7 @@ private struct WinMuxGlassBarSurfaceModifier: ViewModifier {
                         )
                         Color.white.opacity(recipe.whiteTintOpacity)
                     }
-                    .opacity(glassStyle.surfaceOpacity)
+                    .opacity(glassStyle.surfaceOpacity(isDark: palette.isDark))
                     .clipShape(shape)
                 }
                 .clipShape(shape)

@@ -4,7 +4,7 @@ The native implementation uses Geist token roles and the custom WinNotch glass c
 
 | Name | Meaning | Appearance |
 | --- | --- | --- |
-| Widget bar | Status widgets supplied by the independent My Menu Bar app | Clear custom glass at 10% surface opacity (90% transparency), with backdrop blur and a 20% white tint, without an added outline; safe around the camera notch |
+| Widget bar | Status widgets supplied by the independent My Menu Bar app | Clear custom glass at 70% surface opacity (30% transparency) in light mode and 10% surface opacity (90% transparency) in dark mode, with backdrop blur and a 20% white tint, without an added outline; safe around the camera notch |
 | Project frame | Former full-screen surface beneath the Widget bar | Removed; the desktop remains visible through window gaps |
 | Workspace tabs bar | Workspace-only bar beside the camera notch | Content-sized custom glass surface with maximum-strength color-neutral backdrop blur and a 60% white tint composited at 80% surface opacity, plus a fully opaque white border and rounded shadow; active or hovered labels are fully opaque and medium weight, while inactive labels are 50% opaque and regular weight |
 | Workspace frame | Window layout area | No enclosing fill; each window and window tab bar owns its surface |
