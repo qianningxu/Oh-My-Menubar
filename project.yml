@@ -29,8 +29,7 @@ targets:
         INFOPLIST_FILE: resources/MyMenuBarInfo.plist
         MARKETING_VERSION: ${XCODEGEN_WINMUX_VERSION}
         # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/LaunchServicesKeys.html#//apple_ref/doc/uid/20001431-108256
-        # The app is regular rather than an agent so it appears in the Dock,
-        # Command-Tab, and the Force Quit window.
+        # LSUIElement in the app Info.plist keeps this menu bar app out of the Dock.
         CODE_SIGN_STYLE: Automatic
         CODE_SIGN_IDENTITY: ${XCODEGEN_WINMUX_CODE_SIGN_IDENTITY}
         DEVELOPMENT_TEAM: ${XCODEGEN_WINMUX_DEVELOPMENT_TEAM}
