@@ -203,6 +203,18 @@ enum MenuBarFocusRecord {
         }.max()
     }
 
+    static func recordedDatesInMonth(
+        at url: URL = menuBarFocusRecordURL,
+        now: Date = .now,
+        calendar: Calendar = .current
+    ) -> Set<Date>? {
+        guard let contents = try? String(contentsOf: url, encoding: .utf8),
+              let month = calendar.dateInterval(of: .month, for: now),
+              let runs = runs(in: contents, calendar: calendar)
+        else { return nil }
+        return Set(runs.map { calendar.startOfDay(for: $0.date) }.filter(month.contains))
+    }
+
     static func spansInMonth(
         at url: URL = menuBarFocusRecordURL,
         now: Date = .now,

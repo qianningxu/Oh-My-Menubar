@@ -748,6 +748,7 @@ private struct MenuBarFocusCalendarMonth: View {
 
     var body: some View {
         let focusSecondsByDay = self.focusSecondsByDay
+        let recordedBreakDays = MenuBarFocusRecord.recordedDatesInMonth(now: now, calendar: calendar) ?? []
         GeometryReader { geometry in
             let gridHeight = max(
                 WinMuxSpacing.none,
@@ -756,19 +757,11 @@ private struct MenuBarFocusCalendarMonth: View {
             let dayHeight = gridHeight / CGFloat(rowCount)
 
             VStack(alignment: .leading, spacing: WinMuxSpacing.compact) {
-                HStack(spacing: WinMuxSpacing.hairline) {
-                    Text(now.formatted(.dateTime.month(.wide).year()))
-                        .font(.system(size: menuBarWidgetFontSize, weight: .medium))
-                        .foregroundStyle(workspaceSidebarWidgetContent(.primary))
-                    Spacer(minLength: WinMuxSpacing.compact)
-                    Rectangle()
-                        .fill(workspaceSidebarWidgetSemanticColor(.gray, .color3))
-                        .frame(width: WinMuxSpacing.regular, height: WinMuxSpacing.regular)
-                    Text("Break")
-                        .font(.system(size: menuBarWidgetFontSize * 0.8))
-                        .foregroundStyle(workspaceSidebarWidgetContent(.secondary))
-                }
-                .frame(height: WinMuxSpacing.page, alignment: .top)
+                Text(now.formatted(.dateTime.month(.wide).year()))
+                    .font(.system(size: menuBarWidgetFontSize, weight: .medium))
+                    .foregroundStyle(workspaceSidebarWidgetContent(.primary))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .frame(height: WinMuxSpacing.page, alignment: .top)
 
                 LazyVGrid(columns: columns, spacing: WinMuxSpacing.none) {
                     ForEach(Array(weekdayLabels.enumerated()), id: \.offset) { _, label in
@@ -793,7 +786,7 @@ private struct MenuBarFocusCalendarMonth: View {
                                 height: dayHeight,
                                 isToday: calendar.isDate(date, inSameDayAs: now),
                                 isFuture: date > now,
-                                isBreak: seconds < 3600 && calendar.startOfDay(for: date) < calendar.startOfDay(for: now)
+                                isBreak: recordedBreakDays.contains(calendar.startOfDay(for: date))
                             )
                         } else {
                             Rectangle()
@@ -821,6 +814,17 @@ private struct MenuBarFocusCalendarDay: View {
     let isFuture: Bool
     let isBreak: Bool
 
+    private var roundedHours: Int {
+        max(0, Int(hours.rounded(.toNearestOrAwayFromZero)))
+    }
+
+    private var backgroundColor: WorkspaceSidebarWidgetShapeStyle? {
+        if isBreak || isFuture { return nil }
+        if roundedHours > 10 { return workspaceSidebarWidgetSemanticColor(.green, .color4) }
+        if roundedHours >= 8 { return workspaceSidebarWidgetSemanticColor(.amber, .color4) }
+        return workspaceSidebarWidgetSemanticColor(.red, .color4)
+    }
+
     var body: some View {
         let isCompact = height < WinMuxSpacing.page + WinMuxSpacing.regular
         ZStack(alignment: .topLeading) {
@@ -829,18 +833,20 @@ private struct MenuBarFocusCalendarDay: View {
                 .foregroundStyle(workspaceSidebarWidgetSemanticColor(.gray, .color9))
                 .padding(.top, WinMuxSpacing.hairline)
                 .padding(.leading, WinMuxSpacing.compact)
-            Text(isFuture ? "—" : hours.formatted(.number.precision(.fractionLength(0 ... 1))) + "h")
-                .font(.system(size: menuBarWidgetFontSize * (isCompact ? 0.8 : 0.95), weight: .medium))
-                .foregroundStyle(workspaceSidebarWidgetSemanticColor(.gray, .color10))
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .offset(y: isCompact ? WinMuxSpacing.hairline : WinMuxSpacing.compact)
+            if !isFuture {
+                Text("\(roundedHours)h")
+                    .font(.system(size: menuBarWidgetFontSize * (isCompact ? 0.8 : 0.95), weight: .medium))
+                    .foregroundStyle(workspaceSidebarWidgetSemanticColor(.gray, .color10))
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .offset(y: isCompact ? WinMuxSpacing.hairline : WinMuxSpacing.compact)
+            }
         }
-        .frame(maxWidth: .infinity)
-        .frame(height: height)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(height: height, alignment: .top)
         .background {
-            if isBreak {
+            if let backgroundColor {
                 Rectangle()
-                    .fill(workspaceSidebarWidgetSemanticColor(.gray, .color3))
+                    .fill(backgroundColor)
             }
         }
         .overlay {
