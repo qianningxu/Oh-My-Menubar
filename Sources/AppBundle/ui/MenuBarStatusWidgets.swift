@@ -27,7 +27,7 @@ enum MenuBarStatusChartKind: Hashable, CaseIterable {
 
     var panelSize: CGSize {
         switch self {
-            case .focusRuns: CGSize(width: 480, height: menuBarChartSize.height + WinMuxSpacing.page)
+            case .focusRuns: CGSize(width: 480, height: menuBarChartSize.height + WinMuxSpacing.page * 2)
             case .breakPot: .zero
             case .sleep, .spending: menuBarChartSize
         }
@@ -692,7 +692,7 @@ private struct MenuBarFocusCalendarMonth: View {
 
     private let calendar = Calendar.current
     private let columns = Array(
-        repeating: GridItem(.flexible(), spacing: WinMuxSpacing.hairline),
+        repeating: GridItem(.flexible(), spacing: WinMuxSpacing.none),
         count: 7
     )
 
@@ -711,6 +711,10 @@ private struct MenuBarFocusCalendarMonth: View {
 
     private var cellCount: Int {
         ((leadingDays + monthDays + 6) / 7) * 7
+    }
+
+    private var rowCount: Int {
+        max(1, cellCount / 7)
     }
 
     private var weekdayLabels: [String] {
@@ -744,50 +748,67 @@ private struct MenuBarFocusCalendarMonth: View {
 
     var body: some View {
         let focusSecondsByDay = self.focusSecondsByDay
-        VStack(alignment: .leading, spacing: WinMuxSpacing.compact) {
-            HStack(spacing: WinMuxSpacing.hairline) {
-                Text(now.formatted(.dateTime.month(.wide).year()))
-                    .font(.system(size: menuBarWidgetFontSize, weight: .medium))
-                    .foregroundStyle(workspaceSidebarWidgetContent(.primary))
-                Spacer(minLength: WinMuxSpacing.compact)
-                RoundedRectangle(cornerRadius: WinMuxSpacing.hairline)
-                    .fill(workspaceSidebarWidgetSemanticColor(.gray, .color2))
-                    .frame(width: WinMuxSpacing.regular, height: WinMuxSpacing.regular)
-                Text("Break")
-                    .font(.system(size: menuBarWidgetFontSize * 0.8))
-                    .foregroundStyle(workspaceSidebarWidgetContent(.secondary))
-            }
+        GeometryReader { geometry in
+            let gridHeight = max(
+                WinMuxSpacing.none,
+                geometry.size.height - WinMuxSpacing.page - WinMuxSpacing.section - WinMuxSpacing.compact * 2
+            )
+            let dayHeight = gridHeight / CGFloat(rowCount)
 
-            LazyVGrid(columns: columns, spacing: WinMuxSpacing.hairline) {
-                ForEach(Array(weekdayLabels.enumerated()), id: \.offset) { _, label in
-                    Text(label)
-                        .font(.system(size: menuBarWidgetFontSize * 0.75, weight: .medium))
+            VStack(alignment: .leading, spacing: WinMuxSpacing.compact) {
+                HStack(spacing: WinMuxSpacing.hairline) {
+                    Text(now.formatted(.dateTime.month(.wide).year()))
+                        .font(.system(size: menuBarWidgetFontSize, weight: .medium))
+                        .foregroundStyle(workspaceSidebarWidgetContent(.primary))
+                    Spacer(minLength: WinMuxSpacing.compact)
+                    Rectangle()
+                        .fill(workspaceSidebarWidgetSemanticColor(.gray, .color3))
+                        .frame(width: WinMuxSpacing.regular, height: WinMuxSpacing.regular)
+                    Text("Break")
+                        .font(.system(size: menuBarWidgetFontSize * 0.8))
                         .foregroundStyle(workspaceSidebarWidgetContent(.secondary))
-                        .frame(maxWidth: .infinity)
                 }
-            }
+                .frame(height: WinMuxSpacing.page, alignment: .top)
 
-            LazyVGrid(columns: columns, spacing: WinMuxSpacing.hairline) {
-                ForEach(0 ..< cellCount, id: \.self) { index in
-                    let day = index - leadingDays + 1
-                    if monthDays > 0,
-                       (1 ... monthDays).contains(day),
-                       let date = calendar.date(byAdding: .day, value: day - 1, to: monthStart) {
-                        let seconds = focusSecondsByDay[day, default: 0]
-                        MenuBarFocusCalendarDay(
-                            date: date,
-                            hours: seconds / 3600,
-                            isToday: calendar.isDate(date, inSameDayAs: now),
-                            isFuture: date > now,
-                            isBreak: seconds == 0 && calendar.startOfDay(for: date) < calendar.startOfDay(for: now)
-                        )
-                    } else {
-                        WinMuxDesignTokens.transparent
+                LazyVGrid(columns: columns, spacing: WinMuxSpacing.none) {
+                    ForEach(Array(weekdayLabels.enumerated()), id: \.offset) { _, label in
+                        Text(label)
+                            .font(.system(size: menuBarWidgetFontSize * 0.75, weight: .medium))
+                            .foregroundStyle(workspaceSidebarWidgetContent(.secondary))
                             .frame(maxWidth: .infinity)
-                            .frame(height: WinMuxSpacing.section * 2)
                     }
                 }
+                .frame(height: WinMuxSpacing.section)
+
+                LazyVGrid(columns: columns, spacing: WinMuxSpacing.none) {
+                    ForEach(0 ..< cellCount, id: \.self) { index in
+                        let day = index - leadingDays + 1
+                        if monthDays > 0,
+                           (1 ... monthDays).contains(day),
+                           let date = calendar.date(byAdding: .day, value: day - 1, to: monthStart) {
+                            let seconds = focusSecondsByDay[day, default: 0]
+                            MenuBarFocusCalendarDay(
+                                date: date,
+                                hours: seconds / 3600,
+                                height: dayHeight,
+                                isToday: calendar.isDate(date, inSameDayAs: now),
+                                isFuture: date > now,
+                                isBreak: seconds < 3600 && calendar.startOfDay(for: date) < calendar.startOfDay(for: now)
+                            )
+                        } else {
+                            Rectangle()
+                                .fill(WinMuxDesignTokens.transparent)
+                                .frame(height: dayHeight)
+                                .overlay {
+                                    Rectangle()
+                                        .strokeBorder(workspaceSidebarWidgetSemanticColor(.gray, .color5), lineWidth: 0.5)
+                                }
+                        }
+                    }
+                }
+                .frame(height: gridHeight, alignment: .top)
             }
+            .frame(width: geometry.size.width, height: geometry.size.height, alignment: .topLeading)
         }
     }
 }
@@ -795,32 +816,39 @@ private struct MenuBarFocusCalendarMonth: View {
 private struct MenuBarFocusCalendarDay: View {
     let date: Date
     let hours: Double
+    let height: CGFloat
     let isToday: Bool
     let isFuture: Bool
     let isBreak: Bool
 
     var body: some View {
-        VStack(spacing: WinMuxSpacing.none) {
+        let isCompact = height < WinMuxSpacing.page + WinMuxSpacing.regular
+        ZStack(alignment: .topLeading) {
             Text(date.formatted(.dateTime.day()))
-                .font(.system(size: menuBarWidgetFontSize * 0.75, weight: isToday ? .semibold : .regular))
-                .foregroundStyle(workspaceSidebarWidgetContent(.primary))
+                .font(.system(size: menuBarWidgetFontSize * (isCompact ? 0.65 : 0.75), weight: .medium))
+                .foregroundStyle(workspaceSidebarWidgetSemanticColor(.gray, .color9))
+                .padding(.top, WinMuxSpacing.hairline)
+                .padding(.leading, WinMuxSpacing.compact)
             Text(isFuture ? "—" : hours.formatted(.number.precision(.fractionLength(0 ... 1))) + "h")
-                .font(.system(size: menuBarWidgetFontSize * 0.65, design: .monospaced))
-                .foregroundStyle(workspaceSidebarWidgetContent(.secondary))
+                .font(.system(size: menuBarWidgetFontSize * (isCompact ? 0.8 : 0.95), weight: .medium))
+                .foregroundStyle(workspaceSidebarWidgetSemanticColor(.gray, .color10))
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .offset(y: isCompact ? WinMuxSpacing.hairline : WinMuxSpacing.compact)
         }
         .frame(maxWidth: .infinity)
-        .frame(height: WinMuxSpacing.section * 2)
+        .frame(height: height)
         .background {
             if isBreak {
-                RoundedRectangle(cornerRadius: WinMuxSpacing.hairline)
-                    .fill(workspaceSidebarWidgetSemanticColor(.gray, .color2))
+                Rectangle()
+                    .fill(workspaceSidebarWidgetSemanticColor(.gray, .color3))
             }
         }
         .overlay {
-            if isToday {
-                RoundedRectangle(cornerRadius: WinMuxSpacing.hairline)
-                    .stroke(workspaceSidebarWidgetBorder(.normal), lineWidth: WinMuxSpacing.hairline)
-            }
+            Rectangle()
+                .strokeBorder(
+                    workspaceSidebarWidgetSemanticColor(.gray, isToday ? .color9 : .color5),
+                    lineWidth: isToday ? 1.5 : 0.5
+                )
         }
     }
 }
