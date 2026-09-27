@@ -548,7 +548,7 @@ final class MenuBarChartHitRegionView: NSView {
 
     private func updateAccessibilityLabel() {
         switch kind {
-            case .focusRuns: setAccessibilityLabel("Show this month's focus runs")
+            case .focusRuns: setAccessibilityLabel("Show this month's focus calendar")
             case .breakPot: setAccessibilityLabel("Show focus record menu")
             case .sleep: setAccessibilityLabel("Show sleep chart")
             case .spending: setAccessibilityLabel("Show spending chart")
@@ -622,7 +622,7 @@ private struct MenuBarStatusChartView: View {
         Group {
             switch kind {
                 case .focusRuns:
-                    MenuBarFocusRunsChart()
+                    MenuBarFocusCalendar()
                 case .breakPot:
                     EmptyView()
                 case .sleep:
@@ -640,104 +640,186 @@ private struct MenuBarStatusChartView: View {
     }
 }
 
-private func menuBarFocusOrdinalDay(_ date: Date, calendar: Calendar = .current) -> String {
-    let day = calendar.component(.day, from: date)
-    let suffix: String
-    if (11 ... 13).contains(day) {
-        suffix = "th"
-    } else {
-        switch day % 10 {
-            case 1: suffix = "st"
-            case 2: suffix = "nd"
-            case 3: suffix = "rd"
-            default: suffix = "th"
-        }
+@MainActor
+private final class MenuBarFocusCalendarModel: ObservableObject {
+    @Published private(set) var entries: [SidebarSelfDataTimeEntry]?
+    @Published private(set) var isLoading = false
+
+    private var lastRefreshAt = Date.distantPast
+
+    func refresh(now: Date) async {
+        guard !isLoading, now.timeIntervalSince(lastRefreshAt) >= 60 else { return }
+        lastRefreshAt = now
+        isLoading = true
+        defer { isLoading = false }
+
+        let dataPath = URL(filePath: menuBarWidgetDataPath, directoryHint: .isDirectory)
+        entries = await Task.detached(priority: .utility) {
+            guard let sqliteURL = SidebarSelfDataStore.sqliteURL(for: dataPath) else { return nil }
+            return SidebarSelfDataStore.loadTimeEntries(from: sqliteURL, now: now)
+        }.value
     }
-    return "\(day)\(suffix)"
 }
 
-private struct MenuBarFocusRunsChart: View {
+private struct MenuBarFocusCalendar: View {
+    @StateObject private var model = MenuBarFocusCalendarModel()
+
     var body: some View {
         TimelineView(.periodic(from: .now, by: 60)) { context in
-            let spans = MenuBarFocusRecord.spansInMonth(now: context.date)
-            let averages = spans?.filter { $0.dailyAverageHours != nil } ?? []
-            let dates = averages.map(\.run.date)
-            let upperBound = max(10, ceil((averages.compactMap(\.dailyAverageHours).max() ?? 0) / 2) * 2)
-            let firstDate = dates.first ?? context.date
-            let lastDate = dates.last ?? context.date
-            let xStart = Calendar.current.date(byAdding: .day, value: -2, to: firstDate) ?? firstDate
-            let xEnd = Calendar.current.date(byAdding: .day, value: 2, to: lastDate) ?? lastDate
-
-            if spans == nil {
-                Text("Focus record unavailable")
-                    .font(.system(size: menuBarWidgetFontSize))
-                    .foregroundStyle(workspaceSidebarWidgetContent(.secondary))
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else if averages.isEmpty {
-                Text("No focus runs this month")
-                    .font(.system(size: menuBarWidgetFontSize))
-                    .foregroundStyle(workspaceSidebarWidgetContent(.secondary))
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else {
-                Chart {
-                    RuleMark(y: .value("Daily guideline", 8.3))
-                        .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 3]))
+            Group {
+                if let entries = model.entries {
+                    MenuBarFocusCalendarMonth(now: context.date, entries: entries)
+                } else if model.isLoading {
+                    Text("Loading focus…")
                         .foregroundStyle(workspaceSidebarWidgetContent(.secondary))
-                        .annotation(position: .trailing, alignment: .center, spacing: WinMuxSpacing.hairline) {
-                            Text("8.3h")
-                                .font(.system(size: 10, weight: .medium, design: .monospaced))
-                                .foregroundStyle(workspaceSidebarWidgetContent(.secondary))
-                        }
+                } else {
+                    Text("Focus record unavailable")
+                        .foregroundStyle(workspaceSidebarWidgetContent(.secondary))
+                }
+            }
+            .font(.system(size: menuBarWidgetFontSize))
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .task(id: Int(context.date.timeIntervalSince1970 / 60)) {
+                await model.refresh(now: context.date)
+            }
+        }
+    }
+}
 
-                    ForEach(averages, id: \.run.id) { span in
-                        if let hours = span.dailyAverageHours {
-                            LineMark(
-                                x: .value("Date", span.run.date),
-                                y: .value("Daily average focus hours", hours)
-                            )
-                            .interpolationMethod(.catmullRom)
-                            .lineStyle(StrokeStyle(lineWidth: 2))
-                            .foregroundStyle(workspaceSidebarWidgetColor(.color7))
+private struct MenuBarFocusCalendarMonth: View {
+    let now: Date
+    let entries: [SidebarSelfDataTimeEntry]
 
-                            PointMark(
-                                x: .value("Date", span.run.date),
-                                y: .value("Daily average focus hours", hours)
-                            )
-                            .symbolSize(24)
-                            .foregroundStyle(workspaceSidebarWidgetColor(.color7))
-                            .annotation(position: hours >= 7 ? .bottom : .top, spacing: WinMuxSpacing.hairline) {
-                                Text(span.displayDailyAverage)
-                                    .font(.system(size: 10, weight: .medium, design: .monospaced))
-                                    .foregroundStyle(workspaceSidebarWidgetContent(.primary))
-                            }
-                        }
+    private let calendar = Calendar.current
+    private let columns = Array(
+        repeating: GridItem(.flexible(), spacing: WinMuxSpacing.hairline),
+        count: 7
+    )
+
+    private var monthStart: Date {
+        calendar.dateInterval(of: .month, for: now)?.start ?? calendar.startOfDay(for: now)
+    }
+
+    private var monthDays: Int {
+        calendar.range(of: .day, in: .month, for: monthStart)?.count ?? 0
+    }
+
+    private var leadingDays: Int {
+        let weekday = calendar.component(.weekday, from: monthStart)
+        return (weekday - calendar.firstWeekday + 7) % 7
+    }
+
+    private var cellCount: Int {
+        ((leadingDays + monthDays + 6) / 7) * 7
+    }
+
+    private var weekdayLabels: [String] {
+        let symbols = calendar.shortStandaloneWeekdaySymbols
+        return (0 ..< 7).map { offset in
+            String(symbols[(calendar.firstWeekday - 1 + offset) % symbols.count].prefix(2))
+        }
+    }
+
+    private var focusSecondsByDay: [Int: TimeInterval] {
+        guard let monthInterval = calendar.dateInterval(of: .month, for: now) else { return [:] }
+        var result: [Int: TimeInterval] = [:]
+
+        for entry in entries {
+            guard entry.projectName?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() != "break" else {
+                continue
+            }
+            var cursor = max(entry.start, monthInterval.start)
+            let end = min(entry.stop, min(now, monthInterval.end))
+            while cursor < end {
+                let dayStart = calendar.startOfDay(for: cursor)
+                guard let nextDay = calendar.date(byAdding: .day, value: 1, to: dayStart) else { break }
+                let overlapEnd = min(end, nextDay)
+                let day = calendar.component(.day, from: dayStart)
+                result[day, default: 0] += overlapEnd.timeIntervalSince(cursor)
+                cursor = overlapEnd
+            }
+        }
+        return result
+    }
+
+    var body: some View {
+        let focusSecondsByDay = self.focusSecondsByDay
+        VStack(alignment: .leading, spacing: WinMuxSpacing.compact) {
+            HStack(spacing: WinMuxSpacing.hairline) {
+                Text(now.formatted(.dateTime.month(.wide).year()))
+                    .font(.system(size: menuBarWidgetFontSize, weight: .medium))
+                    .foregroundStyle(workspaceSidebarWidgetContent(.primary))
+                Spacer(minLength: WinMuxSpacing.compact)
+                RoundedRectangle(cornerRadius: WinMuxSpacing.hairline)
+                    .fill(workspaceSidebarWidgetSemanticColor(.gray, .color2))
+                    .frame(width: WinMuxSpacing.regular, height: WinMuxSpacing.regular)
+                Text("Break")
+                    .font(.system(size: menuBarWidgetFontSize * 0.8))
+                    .foregroundStyle(workspaceSidebarWidgetContent(.secondary))
+            }
+
+            LazyVGrid(columns: columns, spacing: WinMuxSpacing.hairline) {
+                ForEach(Array(weekdayLabels.enumerated()), id: \.offset) { _, label in
+                    Text(label)
+                        .font(.system(size: menuBarWidgetFontSize * 0.75, weight: .medium))
+                        .foregroundStyle(workspaceSidebarWidgetContent(.secondary))
+                        .frame(maxWidth: .infinity)
+                }
+            }
+
+            LazyVGrid(columns: columns, spacing: WinMuxSpacing.hairline) {
+                ForEach(0 ..< cellCount, id: \.self) { index in
+                    let day = index - leadingDays + 1
+                    if monthDays > 0,
+                       (1 ... monthDays).contains(day),
+                       let date = calendar.date(byAdding: .day, value: day - 1, to: monthStart) {
+                        let seconds = focusSecondsByDay[day, default: 0]
+                        MenuBarFocusCalendarDay(
+                            date: date,
+                            hours: seconds / 3600,
+                            isToday: calendar.isDate(date, inSameDayAs: now),
+                            isFuture: date > now,
+                            isBreak: seconds == 0 && calendar.startOfDay(for: date) < calendar.startOfDay(for: now)
+                        )
+                    } else {
+                        WinMuxDesignTokens.transparent
+                            .frame(maxWidth: .infinity)
+                            .frame(height: WinMuxSpacing.section * 2)
                     }
                 }
-                .chartYScale(domain: 0 ... upperBound)
-                .chartXScale(domain: xStart ... xEnd)
-                .chartXAxis {
-                    AxisMarks(values: dates) { value in
-                        AxisValueLabel(centered: false, anchor: .top, collisionResolution: .disabled) {
-                            if let date = value.as(Date.self) {
-                                Text(menuBarFocusOrdinalDay(date))
-                                    .foregroundStyle(workspaceSidebarWidgetContent(.secondary))
-                            }
-                        }
-                    }
-                }
-                .chartYAxis {
-                    AxisMarks(values: .automatic(desiredCount: 4)) { value in
-                        AxisGridLine()
-                            .foregroundStyle(workspaceSidebarWidgetBorder(.normal))
-                        AxisValueLabel {
-                            if let hours = value.as(Double.self) {
-                                Text("\(Int(hours))h")
-                                    .foregroundStyle(workspaceSidebarWidgetContent(.secondary))
-                            }
-                        }
-                    }
-                }
-                .padding(.top, WinMuxSpacing.section)
+            }
+        }
+    }
+}
+
+private struct MenuBarFocusCalendarDay: View {
+    let date: Date
+    let hours: Double
+    let isToday: Bool
+    let isFuture: Bool
+    let isBreak: Bool
+
+    var body: some View {
+        VStack(spacing: WinMuxSpacing.none) {
+            Text(date.formatted(.dateTime.day()))
+                .font(.system(size: menuBarWidgetFontSize * 0.75, weight: isToday ? .semibold : .regular))
+                .foregroundStyle(workspaceSidebarWidgetContent(.primary))
+            Text(isFuture ? "—" : hours.formatted(.number.precision(.fractionLength(0 ... 1))) + "h")
+                .font(.system(size: menuBarWidgetFontSize * 0.65, design: .monospaced))
+                .foregroundStyle(workspaceSidebarWidgetContent(.secondary))
+        }
+        .frame(maxWidth: .infinity)
+        .frame(height: WinMuxSpacing.section * 2)
+        .background {
+            if isBreak {
+                RoundedRectangle(cornerRadius: WinMuxSpacing.hairline)
+                    .fill(workspaceSidebarWidgetSemanticColor(.gray, .color2))
+            }
+        }
+        .overlay {
+            if isToday {
+                RoundedRectangle(cornerRadius: WinMuxSpacing.hairline)
+                    .stroke(workspaceSidebarWidgetBorder(.normal), lineWidth: WinMuxSpacing.hairline)
             }
         }
     }
