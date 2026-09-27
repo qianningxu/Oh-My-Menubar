@@ -686,6 +686,31 @@ private struct MenuBarFocusCalendar: View {
     }
 }
 
+private func menuBarRoundedFocusHours(_ hours: Double) -> Int {
+    max(0, Int(hours.rounded(.toNearestOrAwayFromZero)))
+}
+
+private enum MenuBarFocusCalendarBand: Int, CaseIterable {
+    case green
+    case yellow
+    case red
+
+    static func forHours(_ hours: Double) -> Self {
+        let roundedHours = menuBarRoundedFocusHours(hours)
+        if roundedHours > 10 { return .green }
+        if roundedHours >= 8 { return .yellow }
+        return .red
+    }
+
+    var family: WorkspaceSidebarProjectThemeFamily {
+        switch self {
+            case .green: .green
+            case .yellow: .amber
+            case .red: .red
+        }
+    }
+}
+
 private struct MenuBarFocusCalendarMonth: View {
     let now: Date
     let entries: [SidebarSelfDataTimeEntry]
@@ -746,9 +771,43 @@ private struct MenuBarFocusCalendarMonth: View {
         return result
     }
 
+    private func colorPercentages(
+        focusSecondsByDay: [Int: TimeInterval],
+        recordedBreakDays: Set<Date>
+    ) -> [Int]? {
+        let lastDay = min(monthDays, calendar.component(.day, from: now))
+        guard lastDay > 0 else { return nil }
+        var counts = Array(repeating: 0, count: MenuBarFocusCalendarBand.allCases.count)
+        for day in 1 ... lastDay {
+            guard let date = calendar.date(byAdding: .day, value: day - 1, to: monthStart),
+                  !recordedBreakDays.contains(calendar.startOfDay(for: date))
+            else { continue }
+            let hours = focusSecondsByDay[day, default: 0] / 3600
+            counts[MenuBarFocusCalendarBand.forHours(hours).rawValue] += 1
+        }
+
+        let total = counts.reduce(0, +)
+        guard total > 0 else { return nil }
+        var percentages = counts.map { $0 * 100 / total }
+        let remaining = 100 - percentages.reduce(0, +)
+        let ranked = MenuBarFocusCalendarBand.allCases.sorted { lhs, rhs in
+            let lhsRemainder = counts[lhs.rawValue] * 100 % total
+            let rhsRemainder = counts[rhs.rawValue] * 100 % total
+            return lhsRemainder == rhsRemainder ? lhs.rawValue < rhs.rawValue : lhsRemainder > rhsRemainder
+        }
+        for band in ranked.prefix(remaining) {
+            percentages[band.rawValue] += 1
+        }
+        return percentages
+    }
+
     var body: some View {
         let focusSecondsByDay = self.focusSecondsByDay
         let recordedBreakDays = MenuBarFocusRecord.recordedDatesInMonth(now: now, calendar: calendar) ?? []
+        let percentages = colorPercentages(
+            focusSecondsByDay: focusSecondsByDay,
+            recordedBreakDays: recordedBreakDays
+        )
         GeometryReader { geometry in
             let gridHeight = max(
                 WinMuxSpacing.none,
@@ -757,11 +816,33 @@ private struct MenuBarFocusCalendarMonth: View {
             let dayHeight = gridHeight / CGFloat(rowCount)
 
             VStack(alignment: .leading, spacing: WinMuxSpacing.compact) {
-                Text(now.formatted(.dateTime.month(.wide).year()))
-                    .font(.system(size: menuBarWidgetFontSize, weight: .medium))
-                    .foregroundStyle(workspaceSidebarWidgetContent(.primary))
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .frame(height: WinMuxSpacing.page, alignment: .top)
+                HStack(spacing: WinMuxSpacing.regular) {
+                    Text(now.formatted(.dateTime.month(.wide).year()))
+                        .font(.system(size: menuBarWidgetFontSize, weight: .medium))
+                        .foregroundStyle(workspaceSidebarWidgetContent(.primary))
+                    Spacer(minLength: WinMuxSpacing.compact)
+                    if let percentages {
+                        HStack(spacing: WinMuxSpacing.regular) {
+                            ForEach(MenuBarFocusCalendarBand.allCases, id: \.self) { band in
+                                HStack(spacing: WinMuxSpacing.hairline) {
+                                    Rectangle()
+                                        .fill(workspaceSidebarWidgetSemanticColor(band.family, .color4))
+                                        .frame(width: WinMuxSpacing.regular, height: WinMuxSpacing.regular)
+                                        .overlay {
+                                            Rectangle()
+                                                .strokeBorder(workspaceSidebarWidgetSemanticColor(.gray, .color5), lineWidth: 0.5)
+                                        }
+                                    Text("\(percentages[band.rawValue])%")
+                                        .font(.system(size: menuBarWidgetFontSize * 0.75, weight: .medium, design: .monospaced))
+                                        .foregroundStyle(workspaceSidebarWidgetContent(.secondary))
+                                }
+                            }
+                        }
+                        .help("Share of non-break days through today")
+                        .accessibilityLabel(Text("Green \(percentages[0])%, yellow \(percentages[1])%, red \(percentages[2])% of non-break days"))
+                    }
+                }
+                .frame(height: WinMuxSpacing.page, alignment: .top)
 
                 LazyVGrid(columns: columns, spacing: WinMuxSpacing.none) {
                     ForEach(Array(weekdayLabels.enumerated()), id: \.offset) { _, label in
@@ -815,14 +896,12 @@ private struct MenuBarFocusCalendarDay: View {
     let isBreak: Bool
 
     private var roundedHours: Int {
-        max(0, Int(hours.rounded(.toNearestOrAwayFromZero)))
+        menuBarRoundedFocusHours(hours)
     }
 
     private var backgroundColor: WorkspaceSidebarWidgetShapeStyle? {
         if isBreak || isFuture { return nil }
-        if roundedHours > 10 { return workspaceSidebarWidgetSemanticColor(.green, .color4) }
-        if roundedHours >= 8 { return workspaceSidebarWidgetSemanticColor(.amber, .color4) }
-        return workspaceSidebarWidgetSemanticColor(.red, .color4)
+        return workspaceSidebarWidgetSemanticColor(MenuBarFocusCalendarBand.forHours(hours).family, .color4)
     }
 
     var body: some View {
