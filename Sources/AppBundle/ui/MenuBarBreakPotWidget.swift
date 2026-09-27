@@ -60,7 +60,7 @@ struct MenuBarBreakPotWidget: View {
     var body: some View {
         TimelineView(.periodic(from: menuBarBreakPotTimelineStart, by: menuBarBreakPotRefreshInterval)) { context in
             HStack(spacing: menuBarWidgetSpacing) {
-                Image(systemName: "cup.and.saucer.fill")
+                Image(systemName: "figure.mind.and.body")
                     .font(.system(size: menuBarWidgetIconSize, weight: menuBarWidgetFontWeight))
                     .frame(width: menuBarWidgetIconFrame, height: menuBarWidgetIconFrame)
                     .foregroundStyle(menuBarWidgetIcon)
