@@ -152,6 +152,25 @@ final class MenuBarBreakPotMenu: NSObject {
     }
 }
 
+struct MenuBarFocusRun: Identifiable {
+    let id: Int
+    let date: Date
+    let focusHours: Double?
+    let type: String
+
+    var displayFocus: String {
+        guard let focusHours else { return "—" }
+        return "\(focusHours.formatted(.number.precision(.fractionLength(0...2)).locale(Locale(identifier: "en_US_POSIX"))))h"
+    }
+}
+
+struct MenuBarFocusRunSpan {
+    let run: MenuBarFocusRun
+    let start: Date
+    let end: Date
+    let shadeIndex: Int
+}
+
 enum MenuBarFocusRecord {
     static let header = "| Date | Focus | Type |\n| ---- | ----- | ---- |\n"
 
@@ -172,6 +191,41 @@ enum MenuBarFocusRecord {
         return tableRows(in: lines, after: headerIndex).compactMap { row in
             date(from: row[0], calendar: calendar)
         }.max()
+    }
+
+    static func spansInMonth(
+        at url: URL = menuBarFocusRecordURL,
+        now: Date = .now,
+        calendar: Calendar = .current
+    ) -> [MenuBarFocusRunSpan]? {
+        guard let contents = try? String(contentsOf: url, encoding: .utf8),
+              let month = calendar.dateInterval(of: .month, for: now),
+              let runs = runs(in: contents, calendar: calendar)
+        else { return nil }
+        var spans: [MenuBarFocusRunSpan] = []
+        for (index, run) in runs.enumerated() {
+            guard month.contains(run.date) else { continue }
+            let previousDate = index > 0 ? runs[index - 1].date : nil
+            let firstDay = previousDate.map { nextDay(after: $0, calendar: calendar) } ?? month.start
+            let start = max(firstDay, month.start)
+            guard start <= run.date else { continue }
+            spans.append(MenuBarFocusRunSpan(run: run, start: start, end: run.date, shadeIndex: spans.count))
+        }
+        return spans
+    }
+
+    static func runs(in contents: String, calendar: Calendar = .current) -> [MenuBarFocusRun]? {
+        let lines = contents.components(separatedBy: .newlines)
+        guard let headerIndex = tableHeaderIndex(in: lines) else { return nil }
+        return tableRows(in: lines, after: headerIndex).enumerated().compactMap { index, row in
+            guard let day = date(from: row[0], calendar: calendar) else { return nil }
+            let focusText = row[1].trimmingCharacters(in: .whitespaces)
+            let numberText = focusText.hasSuffix("h")
+                ? focusText.dropLast().trimmingCharacters(in: .whitespaces)
+                : focusText
+            let focusHours = Double(numberText).flatMap { $0.isFinite && $0 >= 0 ? $0 : nil }
+            return MenuBarFocusRun(id: index, date: day, focusHours: focusHours, type: row[2])
+        }.sorted { $0.date == $1.date ? $0.id < $1.id : $0.date < $1.date }
     }
 
     static func append(

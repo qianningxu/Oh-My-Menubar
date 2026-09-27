@@ -101,8 +101,9 @@ struct MenuBarFocusProgressContent: View {
                 }
             }
         }
-        .menuBarWidgetItem(height: height)
+        .menuBarWidgetItem(height: height, chartKind: .focusRuns)
         .accessibilityElement(children: .contain)
+        .background(MenuBarChartHitRegion(kind: .focusRuns))
     }
 }
 

@@ -20,12 +20,14 @@ let menuBarSurfaceCornerRadius: CGFloat = WinMuxBarStyle.cornerRadius
 private let menuBarChartSize = CGSize(width: 360, height: 216)
 
 enum MenuBarStatusChartKind: Hashable, CaseIterable {
+    case focusRuns
     case breakPot
     case sleep
     case spending
 
     var panelSize: CGSize {
         switch self {
+            case .focusRuns: menuBarFocusCalendarPanelSize(now: .now)
             case .breakPot: .zero
             case .sleep, .spending: menuBarChartSize
         }
@@ -546,6 +548,7 @@ final class MenuBarChartHitRegionView: NSView {
 
     private func updateAccessibilityLabel() {
         switch kind {
+            case .focusRuns: setAccessibilityLabel("Show this month's focus runs")
             case .breakPot: setAccessibilityLabel("Show focus record menu")
             case .sleep: setAccessibilityLabel("Show sleep chart")
             case .spending: setAccessibilityLabel("Show spending chart")
@@ -618,6 +621,8 @@ private struct MenuBarStatusChartView: View {
     var body: some View {
         Group {
             switch kind {
+                case .focusRuns:
+                    MenuBarFocusMonthCalendar()
                 case .breakPot:
                     EmptyView()
                 case .sleep:
@@ -626,12 +631,103 @@ private struct MenuBarStatusChartView: View {
                     MenuBarSpendingChart()
             }
         }
-        .padding(standardGap * 7)
+        .padding(kind == .focusRuns ? WinMuxSpacing.panel : standardGap * 7)
         .frame(width: kind.panelSize.width, height: kind.panelSize.height)
         .background {
             WorkspaceSidebarStatusCardBackground()
         }
         .environment(\.workspaceSidebarProjectThemeFamily, projectThemeFamily)
+    }
+}
+
+private func menuBarFocusCalendarDays(in now: Date, calendar: Calendar) -> [Date] {
+    guard let month = calendar.dateInterval(of: .month, for: now),
+          let firstWeek = calendar.dateInterval(of: .weekOfYear, for: month.start),
+          let days = calendar.range(of: .day, in: .month, for: now)
+    else { return [] }
+    let leadingDays = calendar.dateComponents([.day], from: firstWeek.start, to: month.start).day ?? 0
+    let cellCount = ((leadingDays + days.count + 6) / 7) * 7
+    return (0 ..< cellCount).compactMap { offset in
+        calendar.date(byAdding: .day, value: offset, to: firstWeek.start)
+    }
+}
+
+private func menuBarFocusCalendarPanelSize(now: Date) -> CGSize {
+    var calendar = Calendar(identifier: .iso8601)
+    calendar.timeZone = .current
+    let rowCount = max(1, menuBarFocusCalendarDays(in: now, calendar: calendar).count / 7)
+    let gridHeight = CGFloat(rowCount) * standardGap * 8
+        + CGFloat(rowCount - 1) * WinMuxSpacing.hairline
+    return CGSize(
+        width: 480,
+        height: WinMuxSpacing.panel * 2 + standardGap * 3 + WinMuxSpacing.regular + gridHeight
+    )
+}
+
+private struct MenuBarFocusMonthCalendar: View {
+    private let weekdays = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+    private let columns = Array(repeating: GridItem(.flexible(), spacing: WinMuxSpacing.hairline), count: 7)
+
+    var body: some View {
+        TimelineView(.periodic(from: .now, by: 60)) { context in
+            let calendar = monthCalendar
+            let spans = MenuBarFocusRecord.spansInMonth(now: context.date, calendar: calendar)
+
+            if let spans {
+                VStack(alignment: .leading, spacing: WinMuxSpacing.regular) {
+                    HStack(spacing: WinMuxSpacing.hairline) {
+                        ForEach(weekdays, id: \.self) { weekday in
+                            Text(weekday)
+                                .font(.system(size: 10, weight: .medium))
+                                .foregroundStyle(workspaceSidebarWidgetContent(.secondary))
+                                .frame(maxWidth: .infinity)
+                        }
+                    }
+
+                    LazyVGrid(columns: columns, spacing: WinMuxSpacing.hairline) {
+                        ForEach(menuBarFocusCalendarDays(in: context.date, calendar: calendar), id: \.self) { date in
+                            if calendar.isDate(date, equalTo: context.date, toGranularity: .month) {
+                                let span = spans.first { $0.start <= date && date <= $0.end }
+                                VStack(alignment: .leading, spacing: WinMuxSpacing.hairline) {
+                                    Text("\(calendar.component(.day, from: date))")
+                                        .font(.system(size: 10))
+                                        .foregroundStyle(workspaceSidebarWidgetContent(.secondary))
+                                    if let span, calendar.isDate(date, inSameDayAs: span.end) {
+                                        Text(span.run.displayFocus)
+                                            .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                                            .foregroundStyle(workspaceSidebarWidgetContent(.primary))
+                                    }
+                                }
+                                .padding(.horizontal, WinMuxSpacing.compact)
+                                .frame(maxWidth: .infinity, minHeight: standardGap * 8, maxHeight: standardGap * 8, alignment: .topLeading)
+                                .background {
+                                    if let span {
+                                        RoundedRectangle(cornerRadius: WinMuxSpacing.compact)
+                                            .fill(workspaceSidebarWidgetContent(.secondary))
+                                            .opacity(span.shadeIndex.isMultiple(of: 2) ? 0.12 : 0.23)
+                                    }
+                                }
+                                .help(span.map { "\($0.run.displayFocus) \($0.run.type)" } ?? "")
+                            } else {
+                                Text("")
+                                    .frame(maxWidth: .infinity, minHeight: standardGap * 8, maxHeight: standardGap * 8)
+                            }
+                        }
+                    }
+                }
+            } else {
+                Text("Focus record unavailable")
+                    .font(.system(size: menuBarWidgetFontSize))
+                    .foregroundStyle(workspaceSidebarWidgetContent(.secondary))
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+        }
+    }
+
+    private var monthCalendar: Calendar {
+        var calendar = Calendar(identifier: .iso8601)
+        calendar.timeZone = .current
+        return calendar
     }
 }
 
