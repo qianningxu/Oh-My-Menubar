@@ -660,49 +660,69 @@ private struct MenuBarFocusRunsChart: View {
     var body: some View {
         TimelineView(.periodic(from: .now, by: 60)) { context in
             let spans = MenuBarFocusRecord.spansInMonth(now: context.date)
-            let runs = spans?.map(\.run).filter { $0.focusHours != nil } ?? []
-            let dates = runs.map { menuBarFocusOrdinalDay($0.date) }
-            let upperBound = max(5, ceil((runs.compactMap(\.focusHours).max() ?? 0) / 5) * 5)
+            let averages = spans?.filter { $0.dailyAverageHours != nil } ?? []
+            let dates = averages.map(\.run.date)
+            let upperBound = max(10, ceil((averages.compactMap(\.dailyAverageHours).max() ?? 0) / 2) * 2)
+            let firstDate = dates.first ?? context.date
+            let lastDate = dates.last ?? context.date
+            let xStart = Calendar.current.date(byAdding: .day, value: -2, to: firstDate) ?? firstDate
+            let xEnd = Calendar.current.date(byAdding: .day, value: 2, to: lastDate) ?? lastDate
 
             if spans == nil {
                 Text("Focus record unavailable")
                     .font(.system(size: menuBarWidgetFontSize))
                     .foregroundStyle(workspaceSidebarWidgetContent(.secondary))
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else if runs.isEmpty {
+            } else if averages.isEmpty {
                 Text("No focus runs this month")
                     .font(.system(size: menuBarWidgetFontSize))
                     .foregroundStyle(workspaceSidebarWidgetContent(.secondary))
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
-                Chart(runs) { run in
-                    if let hours = run.focusHours {
-                        LineMark(
-                            x: .value("Date", menuBarFocusOrdinalDay(run.date)),
-                            y: .value("Focus hours", hours)
-                        )
-                        .interpolationMethod(.catmullRom)
-                        .lineStyle(StrokeStyle(lineWidth: 2))
-                        .foregroundStyle(workspaceSidebarWidgetColor(.color7))
-
-                        PointMark(
-                            x: .value("Date", menuBarFocusOrdinalDay(run.date)),
-                            y: .value("Focus hours", hours)
-                        )
-                        .symbolSize(24)
-                        .foregroundStyle(workspaceSidebarWidgetColor(.color7))
-                        .annotation(position: .top, spacing: WinMuxSpacing.hairline) {
-                            Text(run.displayFocus)
+                Chart {
+                    RuleMark(y: .value("Daily guideline", 8.3))
+                        .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 3]))
+                        .foregroundStyle(workspaceSidebarWidgetContent(.secondary))
+                        .annotation(position: .trailing, alignment: .center, spacing: WinMuxSpacing.hairline) {
+                            Text("8.3h")
                                 .font(.system(size: 10, weight: .medium, design: .monospaced))
-                                .foregroundStyle(workspaceSidebarWidgetContent(.primary))
+                                .foregroundStyle(workspaceSidebarWidgetContent(.secondary))
+                        }
+
+                    ForEach(averages, id: \.run.id) { span in
+                        if let hours = span.dailyAverageHours {
+                            LineMark(
+                                x: .value("Date", span.run.date),
+                                y: .value("Daily average focus hours", hours)
+                            )
+                            .interpolationMethod(.catmullRom)
+                            .lineStyle(StrokeStyle(lineWidth: 2))
+                            .foregroundStyle(workspaceSidebarWidgetColor(.color7))
+
+                            PointMark(
+                                x: .value("Date", span.run.date),
+                                y: .value("Daily average focus hours", hours)
+                            )
+                            .symbolSize(24)
+                            .foregroundStyle(workspaceSidebarWidgetColor(.color7))
+                            .annotation(position: hours >= 7 ? .bottom : .top, spacing: WinMuxSpacing.hairline) {
+                                Text(span.displayDailyAverage)
+                                    .font(.system(size: 10, weight: .medium, design: .monospaced))
+                                    .foregroundStyle(workspaceSidebarWidgetContent(.primary))
+                            }
                         }
                     }
                 }
                 .chartYScale(domain: 0 ... upperBound)
+                .chartXScale(domain: xStart ... xEnd)
                 .chartXAxis {
-                    AxisMarks(values: dates) { _ in
-                        AxisValueLabel()
-                            .foregroundStyle(workspaceSidebarWidgetContent(.secondary))
+                    AxisMarks(values: dates) { value in
+                        AxisValueLabel(centered: false, anchor: .top, collisionResolution: .disabled) {
+                            if let date = value.as(Date.self) {
+                                Text(menuBarFocusOrdinalDay(date))
+                                    .foregroundStyle(workspaceSidebarWidgetContent(.secondary))
+                            }
+                        }
                     }
                 }
                 .chartYAxis {

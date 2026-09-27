@@ -169,6 +169,16 @@ struct MenuBarFocusRunSpan {
     let start: Date
     let end: Date
     let shadeIndex: Int
+    let periodDays: Int
+
+    var dailyAverageHours: Double? {
+        run.focusHours.map { $0 / Double(periodDays) }
+    }
+
+    var displayDailyAverage: String {
+        guard let dailyAverageHours else { return "—" }
+        return "\(dailyAverageHours.rounded(.toNearestOrAwayFromZero).formatted(.number.precision(.fractionLength(0)).locale(Locale(identifier: "en_US_POSIX"))))h"
+    }
 }
 
 enum MenuBarFocusRecord {
@@ -209,7 +219,15 @@ enum MenuBarFocusRecord {
             let firstDay = previousDate.map { nextDay(after: $0, calendar: calendar) } ?? month.start
             let start = max(firstDay, month.start)
             guard start <= run.date else { continue }
-            spans.append(MenuBarFocusRunSpan(run: run, start: start, end: run.date, shadeIndex: spans.count))
+            let periodDays = calendar.dateComponents([.day], from: firstDay, to: nextDay(after: run.date, calendar: calendar)).day ?? 0
+            guard periodDays > 0 else { continue }
+            spans.append(MenuBarFocusRunSpan(
+                run: run,
+                start: start,
+                end: run.date,
+                shadeIndex: spans.count,
+                periodDays: periodDays
+            ))
         }
         return spans
     }

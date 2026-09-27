@@ -9,7 +9,7 @@ final class MenuBarBreakPotWidgetTest: XCTestCase {
         let contents = """
         | Date       | Focus   | Type |
         | ---------- | ------- | ---- |
-        | 2026-08-31 | 15 h    |      |
+        | 2026-08-29 | 15 h    |      |
         | 2026-09-06 | 21.99 h | half |
         | 2026-09-09 | 23 h    |      |
         | 2026-09-12 |         |      |
@@ -27,8 +27,13 @@ final class MenuBarBreakPotWidgetTest: XCTestCase {
         XCTAssertEqual(spans[0].run.type, "half")
         XCTAssertEqual(calendar.component(.day, from: spans[0].start), 1)
         XCTAssertEqual(calendar.component(.day, from: spans[0].end), 6)
+        XCTAssertEqual(spans[0].periodDays, 8)
+        XCTAssertEqual(spans[0].dailyAverageHours ?? 0, 21.99 / 8, accuracy: 0.0001)
+        XCTAssertEqual(spans[0].displayDailyAverage, "3h")
         XCTAssertEqual(calendar.component(.day, from: spans[1].start), 7)
         XCTAssertEqual(calendar.component(.day, from: spans[1].end), 9)
+        XCTAssertEqual(spans[1].periodDays, 3)
+        XCTAssertEqual(spans[1].displayDailyAverage, "8h")
         XCTAssertEqual(spans[1].run.displayFocus, "23h")
         XCTAssertEqual(spans.map(\.shadeIndex), [0, 1, 2])
         XCTAssertNil(spans[2].run.focusHours)
@@ -48,6 +53,8 @@ final class MenuBarBreakPotWidgetTest: XCTestCase {
         XCTAssertEqual(spans.count, 1)
         XCTAssertEqual(calendar.component(.day, from: spans[0].start), 1)
         XCTAssertEqual(calendar.component(.day, from: spans[0].end), 6)
+        XCTAssertEqual(spans[0].periodDays, 6)
+        XCTAssertEqual(spans[0].displayDailyAverage, "4h")
     }
 
     func testNextPeriodStartsOnDayAfterLatestRow() throws {
