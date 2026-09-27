@@ -127,16 +127,20 @@ private struct MenuBarFocusPeriodProgress: View {
     }
 
     var body: some View {
-        HStack(spacing: standardGap * 0.5) {
-            Text("\(period.displayLabel) - \(focusHoursText)")
+        HStack(spacing: WinMuxSpacing.compact) {
+            Text(period.displayLabel)
                 .font(.system(size: menuBarWidgetFontSize, weight: menuBarWidgetFontWeight))
-                .monospacedDigit()
                 .lineLimit(1)
 
             VStack(spacing: standardGap * 0.5) {
                 MenuBarFocusProgressBar(progress: focusProgress, opacity: 1)
                 MenuBarFocusProgressBar(progress: timeProgress, opacity: 0.55)
             }
+
+            Text(focusHoursText)
+                .font(.system(size: menuBarWidgetFontSize, weight: menuBarWidgetFontWeight))
+                .monospacedDigit()
+                .lineLimit(1)
         }
         .help(detail)
         .accessibilityElement(children: .ignore)
@@ -158,7 +162,7 @@ private struct MenuBarFocusProgressBar: View {
                         .frame(width: geometry.size.width * min(1, max(0, progress)))
                 }
         }
-        .frame(width: standardGap * 6, height: standardGap * 0.75)
+        .frame(width: standardGap * 8, height: standardGap)
         .accessibilityHidden(true)
     }
 }
