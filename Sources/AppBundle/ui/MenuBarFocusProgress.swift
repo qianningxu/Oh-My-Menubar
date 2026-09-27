@@ -1,6 +1,8 @@
 import Foundation
 import SwiftUI
 
+private let menuBarFocusProgressBarWidth = standardGap * 24
+
 enum MenuBarFocusPeriod: String, CaseIterable, Identifiable {
     case day
     case week
@@ -10,17 +12,17 @@ enum MenuBarFocusPeriod: String, CaseIterable, Identifiable {
 
     var displayLabel: String {
         switch self {
-            case .day: "Daily"
-            case .week: "Weekly"
-            case .month: "Monthly"
+            case .day: "Day"
+            case .week: "Week"
+            case .month: "Month"
         }
     }
 
     var title: String {
         switch self {
-            case .day: "Today"
-            case .week: "This week"
-            case .month: "This month"
+            case .day: "Day"
+            case .week: "Week"
+            case .month: "Month"
         }
     }
 
@@ -158,7 +160,7 @@ private struct MenuBarFocusProgressBar: View {
                         .frame(width: geometry.size.width * min(1, max(0, progress)))
                 }
         }
-        .frame(width: standardGap * 16, height: standardGap)
+        .frame(width: menuBarFocusProgressBarWidth, height: standardGap)
         .accessibilityHidden(true)
     }
 }
