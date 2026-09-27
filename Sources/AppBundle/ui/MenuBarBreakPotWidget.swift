@@ -160,7 +160,7 @@ struct MenuBarFocusRun: Identifiable {
 
     var displayFocus: String {
         guard let focusHours else { return "—" }
-        return "\(focusHours.formatted(.number.precision(.fractionLength(0...2)).locale(Locale(identifier: "en_US_POSIX"))))h"
+        return "\(focusHours.rounded(.toNearestOrAwayFromZero).formatted(.number.precision(.fractionLength(0)).locale(Locale(identifier: "en_US_POSIX"))))h"
     }
 }
 

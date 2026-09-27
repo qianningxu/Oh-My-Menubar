@@ -671,6 +671,7 @@ private struct MenuBarFocusMonthCalendar: View {
         TimelineView(.periodic(from: .now, by: 60)) { context in
             let calendar = monthCalendar
             let spans = MenuBarFocusRecord.spansInMonth(now: context.date, calendar: calendar)
+            let dates = menuBarFocusCalendarDays(in: context.date, calendar: calendar)
 
             if let spans {
                 VStack(alignment: .leading, spacing: WinMuxSpacing.regular) {
@@ -684,26 +685,37 @@ private struct MenuBarFocusMonthCalendar: View {
                     }
 
                     LazyVGrid(columns: columns, spacing: WinMuxSpacing.none) {
-                        ForEach(menuBarFocusCalendarDays(in: context.date, calendar: calendar), id: \.self) { date in
+                        ForEach(dates.indices, id: \.self) { index in
+                            let date = dates[index]
                             if calendar.isDate(date, equalTo: context.date, toGranularity: .month) {
                                 let span = spans.first { $0.start <= date && date <= $0.end }
-                                VStack(alignment: .leading, spacing: WinMuxSpacing.hairline) {
+                                let joinsLeft = span.map { index % 7 > 0 && dates[index - 1] >= $0.start } ?? false
+                                let joinsRight = span.map { index % 7 < 6 && dates[index + 1] <= $0.end } ?? false
+                                let joinsTop = span.map { index >= 7 && dates[index - 7] >= $0.start } ?? false
+                                let joinsBottom = span.map { index + 7 < dates.count && dates[index + 7] <= $0.end } ?? false
+                                ZStack(alignment: .topLeading) {
                                     Text("\(calendar.component(.day, from: date))")
                                         .font(.system(size: 10))
                                         .foregroundStyle(workspaceSidebarWidgetContent(.secondary))
+                                        .padding(.leading, WinMuxSpacing.compact)
+                                        .padding(.top, WinMuxSpacing.hairline)
                                     if let span, calendar.isDate(date, inSameDayAs: span.end) {
                                         Text(span.run.displayFocus)
                                             .font(.system(size: 10, weight: .semibold, design: .monospaced))
                                             .foregroundStyle(workspaceSidebarWidgetContent(.primary))
+                                            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
                                     }
                                 }
-                                .padding(.horizontal, WinMuxSpacing.compact)
-                                .frame(maxWidth: .infinity, minHeight: standardGap * 8, maxHeight: standardGap * 8, alignment: .topLeading)
+                                .frame(maxWidth: .infinity, minHeight: standardGap * 8, maxHeight: standardGap * 8)
                                 .background {
                                     if let span {
                                         Rectangle()
                                             .fill(workspaceSidebarWidgetContent(.secondary))
                                             .opacity(span.shadeIndex.isMultiple(of: 2) ? 0.12 : 0.23)
+                                            .padding(.leading, joinsLeft ? WinMuxSpacing.none : WinMuxSpacing.hairline / 2)
+                                            .padding(.trailing, joinsRight ? WinMuxSpacing.none : WinMuxSpacing.hairline / 2)
+                                            .padding(.top, joinsTop ? WinMuxSpacing.none : WinMuxSpacing.hairline / 2)
+                                            .padding(.bottom, joinsBottom ? WinMuxSpacing.none : WinMuxSpacing.hairline / 2)
                                     }
                                 }
                                 .help(span.map { "\($0.run.displayFocus) \($0.run.type)" } ?? "")
