@@ -33,7 +33,7 @@ enum WinMuxBarStyle {
     static let workspaceBarShadowY = WinMuxSpacing.hairline
     static let workspaceBarShadowOutset = WinMuxSpacing.section
     static let topBarStrokeOpacity: CGFloat = 0
-    static let menuBarLightSurfaceOpacity: CGFloat = 0.50
+    static let menuBarLightSurfaceOpacity: CGFloat = 0.25
     static let menuBarDarkSurfaceOpacity: CGFloat = 0.10
     static let dividerOpacity: CGFloat = 0.15
     static let workspaceTabUnfocusedTextOpacity: CGFloat = 0.50
