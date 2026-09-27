@@ -657,7 +657,6 @@ private func menuBarFocusCalendarPanelSize(now: Date) -> CGSize {
     calendar.timeZone = .current
     let rowCount = max(1, menuBarFocusCalendarDays(in: now, calendar: calendar).count / 7)
     let gridHeight = CGFloat(rowCount) * standardGap * 8
-        + CGFloat(rowCount - 1) * WinMuxSpacing.hairline
     return CGSize(
         width: 480,
         height: WinMuxSpacing.panel * 2 + standardGap * 3 + WinMuxSpacing.regular + gridHeight
@@ -666,7 +665,7 @@ private func menuBarFocusCalendarPanelSize(now: Date) -> CGSize {
 
 private struct MenuBarFocusMonthCalendar: View {
     private let weekdays = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
-    private let columns = Array(repeating: GridItem(.flexible(), spacing: WinMuxSpacing.hairline), count: 7)
+    private let columns = Array(repeating: GridItem(.flexible(), spacing: WinMuxSpacing.none), count: 7)
 
     var body: some View {
         TimelineView(.periodic(from: .now, by: 60)) { context in
@@ -684,7 +683,7 @@ private struct MenuBarFocusMonthCalendar: View {
                         }
                     }
 
-                    LazyVGrid(columns: columns, spacing: WinMuxSpacing.hairline) {
+                    LazyVGrid(columns: columns, spacing: WinMuxSpacing.none) {
                         ForEach(menuBarFocusCalendarDays(in: context.date, calendar: calendar), id: \.self) { date in
                             if calendar.isDate(date, equalTo: context.date, toGranularity: .month) {
                                 let span = spans.first { $0.start <= date && date <= $0.end }
@@ -702,7 +701,7 @@ private struct MenuBarFocusMonthCalendar: View {
                                 .frame(maxWidth: .infinity, minHeight: standardGap * 8, maxHeight: standardGap * 8, alignment: .topLeading)
                                 .background {
                                     if let span {
-                                        RoundedRectangle(cornerRadius: WinMuxSpacing.compact)
+                                        Rectangle()
                                             .fill(workspaceSidebarWidgetContent(.secondary))
                                             .opacity(span.shadeIndex.isMultiple(of: 2) ? 0.12 : 0.23)
                                     }
