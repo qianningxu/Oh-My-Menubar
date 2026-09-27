@@ -753,12 +753,12 @@ private struct MenuBarFocusRunTrends: View {
     private func startDateLabel(at index: Int, spans: [MenuBarFocusRunSpan]) -> String {
         let calendar = Calendar.current
         guard spans.indices.contains(index) else { return "" }
-        let day = calendar.component(.day, from: spans[index].start)
+        let day = calendar.component(.day, from: spans[index].run.date)
         guard index > 0 else { return "\(day)" }
         let daysSincePreviousStart = calendar.dateComponents(
             [.day],
-            from: spans[index - 1].start,
-            to: spans[index].start
+            from: spans[index - 1].run.date,
+            to: spans[index].run.date
         ).day ?? 0
         return "\(day)(+\(daysSincePreviousStart))"
     }
@@ -1058,16 +1058,25 @@ private struct MenuBarFocusCalendarDay: View {
 
     private var backgroundColor: WorkspaceSidebarWidgetShapeStyle? {
         if isFuture { return nil }
-        if isBreak { return workspaceSidebarWidgetSemanticColor(.gray, .color3) }
+        if isBreak { return workspaceSidebarWidgetSemanticColor(.gray, .color1) }
         return workspaceSidebarWidgetSemanticColor(MenuBarFocusCalendarBand.forHours(hours).family, .color3)
     }
 
     var body: some View {
-        Text(date.formatted(.dateTime.day()))
-            .font(.system(size: menuBarWidgetFontSize * 0.75, weight: .medium))
-            .foregroundStyle(workspaceSidebarWidgetSemanticColor(.gray, .color9))
-            .padding(.top, WinMuxSpacing.hairline)
-            .padding(.leading, WinMuxSpacing.compact)
+        ZStack(alignment: .topLeading) {
+            Text(date.formatted(.dateTime.day()))
+                .font(.system(size: menuBarWidgetFontSize * 0.75, weight: .medium))
+                .foregroundStyle(workspaceSidebarWidgetSemanticColor(.gray, .color9))
+                .padding(.top, WinMuxSpacing.hairline)
+                .padding(.leading, WinMuxSpacing.compact)
+            if !isFuture {
+                Text("\(menuBarRoundedFocusHours(hours))h")
+                    .font(.system(size: menuBarWidgetFontSize * 0.85, weight: .medium))
+                    .foregroundStyle(workspaceSidebarWidgetSemanticColor(.gray, .color10))
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .offset(y: WinMuxSpacing.hairline)
+            }
+        }
         .frame(maxWidth: .infinity, alignment: .leading)
         .frame(height: height, alignment: .top)
         .background {
