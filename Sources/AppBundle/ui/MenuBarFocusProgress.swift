@@ -85,21 +85,18 @@ struct MenuBarFocusProgressContent: View {
     }
 
     var body: some View {
+        let period = MenuBarFocusPeriod.day
+
         HStack(spacing: menuBarWidgetSpacing) {
             Image(systemName: "dot.scope")
                 .font(.system(size: menuBarWidgetIconSize, weight: .medium))
                 .frame(width: menuBarWidgetIconFrame, height: menuBarWidgetIconFrame)
                 .foregroundStyle(menuBarWidgetIcon)
 
-            HStack(spacing: WinMuxSpacing.section) {
-                ForEach(MenuBarFocusPeriod.allCases) { period in
-                    MenuBarFocusPeriodProgress(
-                        period: period,
-                        focusedSeconds: snapshot?.errorMessage == nil ? snapshot.map { period.focusedSeconds(in: $0) } : nil,
-                        timeProgress: menuBarFocusTimeProgress(for: period, now: now, calendar: calendar)
-                    )
-                }
-            }
+            MenuBarFocusPeriodProgress(
+                period: period,
+                focusedSeconds: snapshot?.errorMessage == nil ? snapshot.map { period.focusedSeconds(in: $0) } : nil
+            )
         }
         .menuBarWidgetItem(height: height, chartKind: .focusRuns)
         .accessibilityElement(children: .contain)
@@ -110,7 +107,6 @@ struct MenuBarFocusProgressContent: View {
 private struct MenuBarFocusPeriodProgress: View {
     let period: MenuBarFocusPeriod
     let focusedSeconds: TimeInterval?
-    let timeProgress: Double
 
     private var focusProgress: Double {
         guard let focusedSeconds else { return 0 }
@@ -124,25 +120,21 @@ private struct MenuBarFocusPeriodProgress: View {
     }
 
     private var detail: String {
-        "\(period.title): \(focusHoursText) actual focus, \(Int(period.targetHours))h target; "
-            + "\(Int((timeProgress * 100).rounded()))% of \(period.timeDescription) elapsed"
+        "\(period.title): \(focusHoursText) actual focus, \(Int(period.targetHours))h target"
     }
 
     var body: some View {
-        HStack(spacing: WinMuxSpacing.compact) {
-            Text(period.displayLabel)
-                .font(.system(size: menuBarWidgetFontSize, weight: menuBarWidgetFontWeight))
-                .lineLimit(1)
-
-            VStack(spacing: standardGap * 0.5) {
-                MenuBarFocusProgressBar(progress: focusProgress, opacity: 1)
-                MenuBarFocusProgressBar(progress: timeProgress, opacity: 0.55)
+        VStack(alignment: .leading, spacing: standardGap * 0.5) {
+            HStack(spacing: WinMuxSpacing.hairline) {
+                Text(period.displayLabel)
+                Text("-")
+                Text(focusHoursText)
+                    .monospacedDigit()
             }
+            .font(.system(size: menuBarWidgetFontSize, weight: menuBarWidgetFontWeight))
+            .lineLimit(1)
 
-            Text(focusHoursText)
-                .font(.system(size: menuBarWidgetFontSize, weight: menuBarWidgetFontWeight))
-                .monospacedDigit()
-                .lineLimit(1)
+            MenuBarFocusProgressBar(progress: focusProgress, opacity: 1)
         }
         .help(detail)
         .accessibilityElement(children: .ignore)
@@ -164,7 +156,7 @@ private struct MenuBarFocusProgressBar: View {
                         .frame(width: geometry.size.width * min(1, max(0, progress)))
                 }
         }
-        .frame(width: standardGap * 8, height: standardGap)
+        .frame(width: standardGap * 16, height: standardGap)
         .accessibilityHidden(true)
     }
 }
