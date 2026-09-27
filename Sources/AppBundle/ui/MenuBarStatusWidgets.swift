@@ -694,11 +694,13 @@ private struct MenuBarFocusMonthCalendar: View {
                                 let joinsTop = span.map { index >= 7 && dates[index - 7] >= $0.start } ?? false
                                 let joinsBottom = span.map { index + 7 < dates.count && dates[index + 7] <= $0.end } ?? false
                                 ZStack(alignment: .topLeading) {
-                                    Text("\(calendar.component(.day, from: date))")
-                                        .font(.system(size: 10))
-                                        .foregroundStyle(workspaceSidebarWidgetContent(.secondary))
-                                        .padding(.leading, WinMuxSpacing.compact)
-                                        .padding(.top, WinMuxSpacing.hairline)
+                                    if let span, calendar.isDate(date, inSameDayAs: span.start) {
+                                        Text("\(calendar.component(.day, from: date))")
+                                            .font(.system(size: 10))
+                                            .foregroundStyle(workspaceSidebarWidgetContent(.secondary))
+                                            .padding(.leading, WinMuxSpacing.compact)
+                                            .padding(.top, WinMuxSpacing.hairline)
+                                    }
                                     if let span, calendar.isDate(date, inSameDayAs: span.end) {
                                         Text(span.run.displayFocus)
                                             .font(.system(size: 10, weight: .semibold, design: .monospaced))
