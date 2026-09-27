@@ -118,11 +118,12 @@ private struct MenuBarFocusPeriodProgress: View {
 
     private var focusHoursText: String {
         guard let focusedSeconds else { return "—" }
-        return "\(max(0, Int(focusedSeconds / 3600)))h"
+        let hours = max(0, focusedSeconds / 3600).rounded(.toNearestOrAwayFromZero)
+        return "\(Int(hours))h"
     }
 
     private var detail: String {
-        "\(period.title): \(focusHoursText) of \(Int(period.targetHours))h focus; "
+        "\(period.title): \(focusHoursText) actual focus, \(Int(period.targetHours))h target; "
             + "\(Int((timeProgress * 100).rounded()))% of \(period.timeDescription) elapsed"
     }
 
