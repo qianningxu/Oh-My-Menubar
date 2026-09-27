@@ -27,7 +27,7 @@ enum MenuBarStatusChartKind: Hashable, CaseIterable {
 
     var panelSize: CGSize {
         switch self {
-            case .focusRuns: menuBarFocusCalendarPanelSize(now: .now)
+            case .focusRuns: CGSize(width: 480, height: menuBarChartSize.height + WinMuxSpacing.page)
             case .breakPot: .zero
             case .sleep, .spending: menuBarChartSize
         }
@@ -622,7 +622,7 @@ private struct MenuBarStatusChartView: View {
         Group {
             switch kind {
                 case .focusRuns:
-                    MenuBarFocusMonthCalendar()
+                    MenuBarFocusRunsChart()
                 case .breakPot:
                     EmptyView()
                 case .sleep:
@@ -640,107 +640,86 @@ private struct MenuBarStatusChartView: View {
     }
 }
 
-private func menuBarFocusCalendarDays(in now: Date, calendar: Calendar) -> [Date] {
-    guard let month = calendar.dateInterval(of: .month, for: now),
-          let firstWeek = calendar.dateInterval(of: .weekOfYear, for: month.start),
-          let days = calendar.range(of: .day, in: .month, for: now)
-    else { return [] }
-    let leadingDays = calendar.dateComponents([.day], from: firstWeek.start, to: month.start).day ?? 0
-    let cellCount = ((leadingDays + days.count + 6) / 7) * 7
-    return (0 ..< cellCount).compactMap { offset in
-        calendar.date(byAdding: .day, value: offset, to: firstWeek.start)
+private func menuBarFocusOrdinalDay(_ date: Date, calendar: Calendar = .current) -> String {
+    let day = calendar.component(.day, from: date)
+    let suffix: String
+    if (11 ... 13).contains(day) {
+        suffix = "th"
+    } else {
+        switch day % 10 {
+            case 1: suffix = "st"
+            case 2: suffix = "nd"
+            case 3: suffix = "rd"
+            default: suffix = "th"
+        }
     }
+    return "\(day)\(suffix)"
 }
 
-private func menuBarFocusCalendarPanelSize(now: Date) -> CGSize {
-    var calendar = Calendar(identifier: .iso8601)
-    calendar.timeZone = .current
-    let rowCount = max(1, menuBarFocusCalendarDays(in: now, calendar: calendar).count / 7)
-    let gridHeight = CGFloat(rowCount) * standardGap * 8
-    return CGSize(
-        width: 480,
-        height: WinMuxSpacing.panel * 2 + standardGap * 3 + WinMuxSpacing.regular + gridHeight
-    )
-}
-
-private struct MenuBarFocusMonthCalendar: View {
-    private let weekdays = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
-    private let columns = Array(repeating: GridItem(.flexible(), spacing: WinMuxSpacing.none), count: 7)
-
+private struct MenuBarFocusRunsChart: View {
     var body: some View {
         TimelineView(.periodic(from: .now, by: 60)) { context in
-            let calendar = monthCalendar
-            let spans = MenuBarFocusRecord.spansInMonth(now: context.date, calendar: calendar)
-            let dates = menuBarFocusCalendarDays(in: context.date, calendar: calendar)
+            let spans = MenuBarFocusRecord.spansInMonth(now: context.date)
+            let runs = spans?.map(\.run).filter { $0.focusHours != nil } ?? []
+            let dates = runs.map { menuBarFocusOrdinalDay($0.date) }
+            let upperBound = max(5, ceil((runs.compactMap(\.focusHours).max() ?? 0) / 5) * 5)
 
-            if let spans {
-                VStack(alignment: .leading, spacing: WinMuxSpacing.regular) {
-                    HStack(spacing: WinMuxSpacing.hairline) {
-                        ForEach(weekdays, id: \.self) { weekday in
-                            Text(weekday)
-                                .font(.system(size: 10, weight: .medium))
-                                .foregroundStyle(workspaceSidebarWidgetContent(.secondary))
-                                .frame(maxWidth: .infinity)
-                        }
-                    }
-
-                    LazyVGrid(columns: columns, spacing: WinMuxSpacing.none) {
-                        ForEach(dates.indices, id: \.self) { index in
-                            let date = dates[index]
-                            if calendar.isDate(date, equalTo: context.date, toGranularity: .month) {
-                                let span = spans.first { $0.start <= date && date <= $0.end }
-                                let joinsLeft = span.map { index % 7 > 0 && dates[index - 1] >= $0.start } ?? false
-                                let joinsRight = span.map { index % 7 < 6 && dates[index + 1] <= $0.end } ?? false
-                                let joinsTop = span.map { index >= 7 && dates[index - 7] >= $0.start } ?? false
-                                let joinsBottom = span.map { index + 7 < dates.count && dates[index + 7] <= $0.end } ?? false
-                                ZStack(alignment: .topLeading) {
-                                    if let span, calendar.isDate(date, inSameDayAs: span.start) {
-                                        Text("\(calendar.component(.day, from: date))")
-                                            .font(.system(size: 10))
-                                            .foregroundStyle(workspaceSidebarWidgetContent(.secondary))
-                                            .padding(.leading, WinMuxSpacing.compact)
-                                            .padding(.top, WinMuxSpacing.hairline)
-                                    }
-                                    if let span, calendar.isDate(date, inSameDayAs: span.end) {
-                                        Text(span.run.displayFocus)
-                                            .font(.system(size: 10, weight: .semibold, design: .monospaced))
-                                            .foregroundStyle(workspaceSidebarWidgetContent(.primary))
-                                            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
-                                    }
-                                }
-                                .frame(maxWidth: .infinity, minHeight: standardGap * 8, maxHeight: standardGap * 8)
-                                .background {
-                                    if let span {
-                                        Rectangle()
-                                            .fill(workspaceSidebarWidgetContent(.secondary))
-                                            .opacity(span.shadeIndex.isMultiple(of: 2) ? 0.12 : 0.23)
-                                            .padding(.leading, joinsLeft ? WinMuxSpacing.none : WinMuxSpacing.hairline / 2)
-                                            .padding(.trailing, joinsRight ? WinMuxSpacing.none : WinMuxSpacing.hairline / 2)
-                                            .padding(.top, joinsTop ? WinMuxSpacing.none : WinMuxSpacing.hairline / 2)
-                                            .padding(.bottom, joinsBottom ? WinMuxSpacing.none : WinMuxSpacing.hairline / 2)
-                                    }
-                                }
-                                .help(span.map { "\($0.run.displayFocus) \($0.run.type)" } ?? "")
-                            } else {
-                                Text("")
-                                    .frame(maxWidth: .infinity, minHeight: standardGap * 8, maxHeight: standardGap * 8)
-                            }
-                        }
-                    }
-                }
-            } else {
+            if spans == nil {
                 Text("Focus record unavailable")
                     .font(.system(size: menuBarWidgetFontSize))
                     .foregroundStyle(workspaceSidebarWidgetContent(.secondary))
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else if runs.isEmpty {
+                Text("No focus runs this month")
+                    .font(.system(size: menuBarWidgetFontSize))
+                    .foregroundStyle(workspaceSidebarWidgetContent(.secondary))
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                Chart(runs) { run in
+                    if let hours = run.focusHours {
+                        LineMark(
+                            x: .value("Date", menuBarFocusOrdinalDay(run.date)),
+                            y: .value("Focus hours", hours)
+                        )
+                        .interpolationMethod(.catmullRom)
+                        .lineStyle(StrokeStyle(lineWidth: 2))
+                        .foregroundStyle(workspaceSidebarWidgetColor(.color7))
+
+                        PointMark(
+                            x: .value("Date", menuBarFocusOrdinalDay(run.date)),
+                            y: .value("Focus hours", hours)
+                        )
+                        .symbolSize(24)
+                        .foregroundStyle(workspaceSidebarWidgetColor(.color7))
+                        .annotation(position: .top, spacing: WinMuxSpacing.hairline) {
+                            Text(run.displayFocus)
+                                .font(.system(size: 10, weight: .medium, design: .monospaced))
+                                .foregroundStyle(workspaceSidebarWidgetContent(.primary))
+                        }
+                    }
+                }
+                .chartYScale(domain: 0 ... upperBound)
+                .chartXAxis {
+                    AxisMarks(values: dates) { _ in
+                        AxisValueLabel()
+                            .foregroundStyle(workspaceSidebarWidgetContent(.secondary))
+                    }
+                }
+                .chartYAxis {
+                    AxisMarks(values: .automatic(desiredCount: 4)) { value in
+                        AxisGridLine()
+                            .foregroundStyle(workspaceSidebarWidgetBorder(.normal))
+                        AxisValueLabel {
+                            if let hours = value.as(Double.self) {
+                                Text("\(Int(hours))h")
+                                    .foregroundStyle(workspaceSidebarWidgetContent(.secondary))
+                            }
+                        }
+                    }
+                }
+                .padding(.top, WinMuxSpacing.section)
             }
         }
-    }
-
-    private var monthCalendar: Calendar {
-        var calendar = Calendar(identifier: .iso8601)
-        calendar.timeZone = .current
-        return calendar
     }
 }
 
