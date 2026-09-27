@@ -91,7 +91,8 @@ struct MenuBarFocusProgressContent: View {
             ForEach(MenuBarFocusPeriod.allCases) { period in
                 MenuBarFocusPeriodProgress(
                     period: period,
-                    focusedSeconds: snapshot?.errorMessage == nil ? snapshot.map { period.focusedSeconds(in: $0) } : nil
+                    focusedSeconds: snapshot?.errorMessage == nil ? snapshot.map { period.focusedSeconds(in: $0) } : nil,
+                    timeProgress: menuBarFocusTimeProgress(for: period, now: now, calendar: calendar)
                 )
             }
         }
@@ -104,11 +105,7 @@ struct MenuBarFocusProgressContent: View {
 private struct MenuBarFocusPeriodProgress: View {
     let period: MenuBarFocusPeriod
     let focusedSeconds: TimeInterval?
-
-    private var focusProgress: Double {
-        guard let focusedSeconds else { return 0 }
-        return min(1, max(0, focusedSeconds / (period.targetHours * 3600)))
-    }
+    let timeProgress: Double
 
     private var focusHoursText: String {
         guard let focusedSeconds else { return "—" }
@@ -117,7 +114,7 @@ private struct MenuBarFocusPeriodProgress: View {
     }
 
     private var detail: String {
-        "\(period.title): \(focusHoursText) actual focus, \(Int(period.targetHours))h target"
+        "\(period.title): \(focusHoursText) actual focus, \(Int(period.targetHours))h target. Bar shows elapsed time (\(period.timeDescription))."
     }
 
     var body: some View {
@@ -131,7 +128,7 @@ private struct MenuBarFocusPeriodProgress: View {
             .font(.system(size: menuBarWidgetFontSize, weight: menuBarWidgetFontWeight))
             .lineLimit(1)
 
-            MenuBarFocusProgressBar(progress: focusProgress, opacity: 1)
+            MenuBarFocusProgressBar(progress: timeProgress, opacity: 1)
         }
         .help(detail)
         .accessibilityElement(children: .ignore)
