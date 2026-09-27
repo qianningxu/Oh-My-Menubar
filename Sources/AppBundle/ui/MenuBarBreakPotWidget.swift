@@ -1,81 +1,45 @@
+import AppKit
 import Foundation
 import SwiftUI
 
 private let menuBarBreakPotRefreshInterval: TimeInterval = 15 * 60
 private let menuBarBreakPotTimelineStart = Date(timeIntervalSinceReferenceDate: 0)
-private let menuBarBreakPotResetDirectory = URL(
-    filePath: "/Users/side/Documents/now/my_app/self/self_ob/Reset/Break",
-    directoryHint: .isDirectory,
-)
-private let menuBarBreakPotResetTemplate = URL(
-    filePath: "/Users/side/Documents/now/my_app/self/self_ob/Others/Templates/break reset.md",
-)
+private let menuBarFocusRecordURL = URL(filePath: "/Users/side/Documents/now/my_app/self/self_ob/Others/Focus record.md")
 
-private enum MenuBarBreakPotSpendKind {
-    case halfDay
-    case fullDay
-
-    var title: String {
-        switch self {
-            case .halfDay: "Half day · 25h"
-            case .fullDay: "Full day · 50h"
-        }
-    }
-
-    var recordValue: String {
-        switch self {
-            case .halfDay: "half"
-            case .fullDay: "full"
-        }
-    }
-
+private enum MenuBarFocusType: String, CaseIterable {
+    case quietNight = "宁静夜晚"
+    case lateStartEarlyFinish = "晚起早退"
+    case carefree = "不管不顾"
 }
 
 @MainActor
 private final class MenuBarBreakPotModel: ObservableObject {
     static let shared = MenuBarBreakPotModel()
 
-    @Published private(set) var snapshot: MenuBarBreakPotState
-    @Published private(set) var activeKind: MenuBarBreakPotSpendKind?
-    @Published private(set) var statusText: String?
+    @Published private(set) var anchorAt: Date
     private var nextRefreshAt = Date.distantPast
-    private var isRefreshing = false
 
     private init() {
-        snapshot = MenuBarBreakPotState.loadLatestReset() ?? .localFallback()
+        anchorAt = MenuBarFocusRecord.nextStart() ?? Calendar.current.startOfDay(for: .now)
     }
 
-    func refresh() async {
+    func refresh() {
         let now = Date()
-        guard activeKind == nil, !isRefreshing, now >= nextRefreshAt else { return }
-
-        isRefreshing = true
+        guard now >= nextRefreshAt else { return }
         nextRefreshAt = now.addingTimeInterval(menuBarBreakPotRefreshInterval)
-        defer { isRefreshing = false }
-        snapshot = MenuBarBreakPotState.loadLatestReset() ?? .localFallback(now: now)
+        anchorAt = MenuBarFocusRecord.nextStart() ?? Calendar.current.startOfDay(for: now)
     }
 
-    func spend(_ kind: MenuBarBreakPotSpendKind) async {
-        guard activeKind == nil else { return }
-        activeKind = kind
-        statusText = nil
-        do {
-            let now = Date()
-            guard let focusHours = menuBarBreakPotLocalBalance(snapshot: snapshot, now: now) else {
-                throw MenuBarBreakPotResetError.focusHoursUnavailable
-            }
-            try MenuBarBreakPotResetRecord.create(
-                kind: kind,
-                periodStart: snapshot.anchorAt,
-                finish: now,
-                focusHours: focusHours,
-            )
-            snapshot = MenuBarBreakPotState(anchorAt: MenuBarBreakPotState.resetAnchor(after: now))
-            statusText = "Recorded locally"
-        } catch {
-            statusText = error.localizedDescription
+    func record(_ type: MenuBarFocusType) throws {
+        let now = Date()
+        let start = MenuBarFocusRecord.nextStart() ?? Calendar.current.startOfDay(for: now)
+        guard start <= now else { throw MenuBarFocusRecordError.alreadyRecordedToday }
+        guard let focusHours = menuBarBreakPotLocalBalance(from: start, to: now) else {
+            throw MenuBarFocusRecordError.focusHoursUnavailable
         }
-        activeKind = nil
+        try MenuBarFocusRecord.append(date: now, focusHours: focusHours, type: type.rawValue)
+        anchorAt = MenuBarFocusRecord.nextDay(after: now)
+        nextRefreshAt = now.addingTimeInterval(menuBarBreakPotRefreshInterval)
     }
 }
 
@@ -103,22 +67,18 @@ struct MenuBarBreakPotWidget: View {
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(Text(accessibilityText(at: context.date)))
             .background(MenuBarChartHitRegion(kind: .breakPot))
-            .task(id: context.date) {
-                await model.refresh()
-            }
+            .task(id: context.date) { model.refresh() }
         }
     }
 
     private func displayText(at now: Date) -> String {
-        let snapshot = model.snapshot
-        let balance = menuBarBreakPotLocalBalance(snapshot: snapshot, now: now)
-        return "\(roundedBalance(balance))h \(menuBarBreakPotElapsedText(anchorAt: snapshot.anchorAt, now: now))"
+        let balance = menuBarBreakPotLocalBalance(from: model.anchorAt, to: now)
+        return "\(roundedBalance(balance))h \(menuBarBreakPotElapsedText(anchorAt: model.anchorAt, now: now))"
     }
 
     private func accessibilityText(at now: Date) -> String {
-        let snapshot = model.snapshot
-        let balance = menuBarBreakPotLocalBalance(snapshot: snapshot, now: now)
-        return "Break Pot balance, \(roundedBalance(balance)) focused hours, \(menuBarBreakPotElapsedText(anchorAt: snapshot.anchorAt, now: now)), using local data"
+        let balance = menuBarBreakPotLocalBalance(from: model.anchorAt, to: now)
+        return "Focus since last record, \(roundedBalance(balance)) hours, \(menuBarBreakPotElapsedText(anchorAt: model.anchorAt, now: now))"
     }
 
     private func roundedBalance(_ balance: Double?) -> Int {
@@ -126,165 +86,117 @@ struct MenuBarBreakPotWidget: View {
     }
 }
 
-struct MenuBarBreakPotActionsView: View {
-    @StateObject private var model = MenuBarBreakPotModel.shared
+@MainActor
+final class MenuBarBreakPotMenu: NSObject {
+    static let shared = MenuBarBreakPotMenu()
 
-    var body: some View {
-        VStack(alignment: .leading, spacing: standardGap * 6) {
-            HStack(alignment: .firstTextBaseline) {
-                Text("Break Pot")
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(workspaceSidebarWidgetContent(.secondary))
-                Spacer()
-                Text(balanceText)
-                    .font(.system(size: 16, weight: .semibold, design: .rounded))
-                    .monospacedDigit()
-                    .foregroundStyle(workspaceSidebarWidgetContent(.primary))
-            }
+    func show(at frame: NSRect) {
+        let anchor = NSPanelHud()
+        anchor.contentView = NSView(frame: NSRect(x: 0, y: 0, width: 1, height: 1))
+        anchor.setFrame(NSRect(x: frame.minX, y: frame.minY, width: 1, height: 1), display: false)
+        anchor.level = .popUpMenu
+        anchor.hasShadow = false
+        anchor.ignoresMouseEvents = true
+        anchor.orderFrontRegardless()
+        defer { anchor.orderOut(nil) }
 
-            HStack(spacing: standardGap * 4) {
-                spendButton(.halfDay)
-                spendButton(.fullDay)
-            }
-
-            if let statusText = model.statusText {
-                Text(statusText)
-                    .font(.system(size: 10, weight: .medium))
-                    .foregroundStyle(workspaceSidebarWidgetContent(.secondary))
-            } else {
-                Text("Stored locally")
-                    .font(.system(size: 10, weight: .medium))
-                    .foregroundStyle(workspaceSidebarWidgetContent(.secondary))
-            }
+        let menu = NSMenu()
+        for type in MenuBarFocusType.allCases {
+            let item = NSMenuItem(title: type.rawValue, action: #selector(record(_:)), keyEquivalent: "")
+            item.target = self
+            item.representedObject = type.rawValue
+            menu.addItem(item)
         }
-        .task { await model.refresh() }
+        menu.popUp(positioning: nil, at: .zero, in: anchor.contentView)
     }
 
-    private var balanceText: String {
-        let balance = menuBarBreakPotLocalBalance(snapshot: model.snapshot, now: .now) ?? 0
-        return "\(max(0, Int(balance.rounded())))h"
-    }
-
-    private func spendButton(_ kind: MenuBarBreakPotSpendKind) -> some View {
-        Button {
-            Task { await model.spend(kind) }
-        } label: {
-            HStack(spacing: standardGap * 3) {
-                if model.activeKind == kind {
-                    ProgressView().controlSize(.small)
-                }
-                Text(kind.title)
-                    .lineLimit(1)
-            }
-            .frame(maxWidth: .infinity)
+    @objc private func record(_ sender: NSMenuItem) {
+        guard let rawValue = sender.representedObject as? String,
+              let type = MenuBarFocusType(rawValue: rawValue) else { return }
+        do {
+            try MenuBarBreakPotModel.shared.record(type)
+        } catch {
+            let alert = NSAlert()
+            alert.messageText = "Could not record focus"
+            alert.informativeText = error.localizedDescription
+            alert.runModal()
         }
-        .buttonStyle(MenuBarBreakPotButtonStyle())
-        .disabled(model.activeKind != nil)
-        .accessibilityLabel("Use Break Pot for a \(kind.title.lowercased())")
     }
 }
 
-private struct MenuBarBreakPotButtonStyle: ButtonStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .font(.system(size: 11, weight: .semibold))
-            .foregroundStyle(workspaceSidebarWidgetContent(.primary))
-            .padding(.horizontal, standardGap * 5)
-            .frame(height: 34)
-            .background {
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(workspaceSidebarWidgetComponentBackground(configuration.isPressed ? .active : .normal))
-            }
-            .overlay {
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .strokeBorder(workspaceSidebarWidgetBorder(configuration.isPressed ? .active : .normal), lineWidth: 0.75)
-            }
-    }
-}
+enum MenuBarFocusRecord {
+    static let header = "| Date | Focus | Type |\n| ---- | ----- | ---- |\n"
 
-private struct MenuBarBreakPotState {
-    let anchorAt: Date
-
-    static func localFallback(now: Date = Date()) -> MenuBarBreakPotState {
-        MenuBarBreakPotState(anchorAt: Calendar.current.startOfDay(for: now))
+    static func nextStart(at url: URL = menuBarFocusRecordURL, calendar: Calendar = .current) -> Date? {
+        guard let contents = try? String(contentsOf: url, encoding: .utf8),
+              let lastDate = lastDate(in: contents, calendar: calendar) else { return nil }
+        return nextDay(after: lastDate, calendar: calendar)
     }
 
-    static func loadLatestReset() -> MenuBarBreakPotState? {
-        guard let noteURLs = try? FileManager.default.contentsOfDirectory(
-            at: menuBarBreakPotResetDirectory,
-            includingPropertiesForKeys: nil,
-        ) else {
-            return nil
-        }
-
-        return noteURLs.compactMap { noteURL in
-            guard noteURL.pathExtension == "md",
-                  let contents = try? String(contentsOf: noteURL, encoding: .utf8),
-                  let finishAt = menuBarBreakPotFinishDate(from: contents)
-            else {
-                return nil
-            }
-            return MenuBarBreakPotState(anchorAt: resetAnchor(after: finishAt))
-        }.max { $0.anchorAt < $1.anchorAt }
+    static func nextDay(after date: Date, calendar: Calendar = .current) -> Date {
+        let day = calendar.startOfDay(for: date)
+        return calendar.date(byAdding: .day, value: 1, to: day) ?? day
     }
 
-    static func resetAnchor(after finish: Date) -> Date {
-        let calendar = Calendar.current
-        let finishDay = calendar.startOfDay(for: finish)
-        return calendar.date(byAdding: .day, value: 1, to: finishDay) ?? finishDay
+    static func lastDate(in contents: String, calendar: Calendar = .current) -> Date? {
+        let formatter = dateFormatter(calendar: calendar)
+        return contents.split(whereSeparator: \.isNewline).compactMap { line -> Date? in
+            let cells = line.split(separator: "|", omittingEmptySubsequences: false)
+            guard cells.count == 5 else { return nil }
+            return formatter.date(from: cells[1].trimmingCharacters(in: .whitespaces))
+        }.max()
     }
-}
 
-private enum MenuBarBreakPotResetRecord {
-    static func create(
-        kind: MenuBarBreakPotSpendKind,
-        periodStart: Date,
-        finish: Date,
+    static func append(
+        date: Date,
         focusHours: Double,
+        type: String,
+        at url: URL = menuBarFocusRecordURL,
+        calendar: Calendar = .current
     ) throws {
         let fileManager = FileManager.default
-        try fileManager.createDirectory(at: menuBarBreakPotResetDirectory, withIntermediateDirectories: true)
-
-        let baseFileName = menuBarBreakPotNoteFileName(for: finish)
-        var noteURL = menuBarBreakPotResetDirectory.appending(component: "\(baseFileName).md")
-        var sequence = 2
-        while fileManager.fileExists(atPath: noteURL.path) {
-            noteURL = menuBarBreakPotResetDirectory.appending(
-                component: "\(baseFileName)-\(sequence).md",
-            )
-            sequence += 1
+        try fileManager.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        var contents = fileManager.fileExists(atPath: url.path)
+            ? try String(contentsOf: url, encoding: .utf8)
+            : header
+        guard contents.contains("| Date | Focus | Type |"),
+              contents.contains("| ---- | ----- | ---- |") else {
+            throw MenuBarFocusRecordError.invalidTable
         }
+        contents = contents.replacingOccurrences(of: "|      |       |      |\n", with: "")
+        if !contents.hasSuffix("\n") { contents += "\n" }
+        let dateText = dateFormatter(calendar: calendar).string(from: date)
+        let hoursText = String(format: "%.2f h", locale: Locale(identifier: "en_US_POSIX"), focusHours)
+        contents += "| \(dateText) | \(hoursText) | \(type) |\n"
+        try contents.write(to: url, atomically: true, encoding: .utf8)
+    }
 
-        let template = try String(contentsOf: menuBarBreakPotResetTemplate, encoding: .utf8)
-        let frontmatter = """
-        ---
-        start: \(menuBarBreakPotDateString(periodStart))
-        finish: \(menuBarBreakPotDateString(finish))
-        focus_hour: \(String(format: "%.2f", focusHours))
-        Break: \(kind.recordValue)
-        ---
-        """
-        let contents = template
-            .replacingOccurrences(
-                of: "---\nstart:\nfinish:\nfocus_hour:\nBreak:\n---",
-                with: frontmatter,
-            )
-            .replacingOccurrences(of: "\n<% tp.file.rename(tp.date.now(\"YYYY-MM-DD\")) %>\n", with: "\n")
-        try contents.write(to: noteURL, atomically: true, encoding: .utf8)
+    private static func dateFormatter(calendar: Calendar) -> DateFormatter {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.calendar = calendar
+        formatter.timeZone = calendar.timeZone
+        formatter.isLenient = false
+        formatter.dateFormat = "yyyy-MM-dd"
+        return formatter
     }
 }
 
-private func menuBarBreakPotLocalBalance(snapshot: MenuBarBreakPotState, now: Date) -> Double? {
+private func menuBarBreakPotLocalBalance(from start: Date, to now: Date) -> Double? {
     guard let sqliteURL = SidebarSelfDataStore.sqliteURL(
         for: URL(filePath: defaultWorkspaceSidebarDataPath, directoryHint: .isDirectory)
     ), let entries = SidebarSelfDataStore.loadTimeEntries(from: sqliteURL, now: now)
     else { return nil }
 
+    return menuBarBreakPotFocusHours(entries: entries, from: start, to: now)
+}
+
+func menuBarBreakPotFocusHours(entries: [SidebarSelfDataTimeEntry], from start: Date, to now: Date) -> Double {
     let focusSeconds = entries.reduce(0.0) { total, entry in
         guard entry.projectName?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() != "break" else {
             return total
         }
-        let overlapStart = max(entry.start, snapshot.anchorAt)
+        let overlapStart = max(entry.start, start)
         let overlapEnd = min(entry.stop, now)
         return total + max(0, overlapEnd.timeIntervalSince(overlapStart))
     }
@@ -299,62 +211,16 @@ private func menuBarBreakPotElapsedText(anchorAt: Date, now: Date) -> String {
     return days == 0 ? "since today" : "since \(days)d ago"
 }
 
-private enum MenuBarBreakPotResetError: LocalizedError {
+private enum MenuBarFocusRecordError: LocalizedError {
     case focusHoursUnavailable
+    case invalidTable
+    case alreadyRecordedToday
 
     var errorDescription: String? {
         switch self {
             case .focusHoursUnavailable: "Could not calculate focus hours from local Toggl data."
+            case .invalidTable: "Focus record.md does not contain the Date, Focus, Type table."
+            case .alreadyRecordedToday: "Focus has already been recorded for today."
         }
     }
-}
-
-func menuBarBreakPotFinishDate(from noteContents: String, timeZone: TimeZone = .current) -> Date? {
-    let pattern = #"(?m)^finish:[ \t]*([^\r\n]+?)[ \t]*$"#
-    guard let expression = try? NSRegularExpression(pattern: pattern),
-          let match = expression.firstMatch(
-              in: noteContents,
-              range: NSRange(noteContents.startIndex..., in: noteContents),
-          ),
-          let range = Range(match.range(at: 1), in: noteContents)
-    else {
-        return nil
-    }
-    let value = String(noteContents[range])
-    let fractionalSecondsFormatter = ISO8601DateFormatter()
-    fractionalSecondsFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-    if let date = fractionalSecondsFormatter.date(from: value) {
-        return date
-    }
-
-    let formatter = ISO8601DateFormatter()
-    formatter.formatOptions = [.withInternetDateTime]
-    if let date = formatter.date(from: value) {
-        return date
-    }
-
-    // Obsidian datetime properties may omit an offset; these are local wall times.
-    let localFormatter = DateFormatter()
-    localFormatter.locale = Locale(identifier: "en_US_POSIX")
-    localFormatter.calendar = Calendar(identifier: .gregorian)
-    localFormatter.timeZone = timeZone
-    localFormatter.isLenient = false
-    for format in ["yyyy-MM-dd'T'HH:mm:ss", "yyyy-MM-dd'T'HH:mm", "yyyy-MM-dd"] {
-        localFormatter.dateFormat = format
-        if let date = localFormatter.date(from: value), localFormatter.string(from: date) == value {
-            return date
-        }
-    }
-    return nil
-}
-
-private func menuBarBreakPotDateString(_ date: Date) -> String {
-    let formatter = ISO8601DateFormatter()
-    formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-    return formatter.string(from: date)
-}
-
-private func menuBarBreakPotNoteFileName(for date: Date) -> String {
-    let components = Calendar.current.dateComponents([.year, .month, .day], from: date)
-    return String(format: "%04d-%02d-%02d", components.year ?? 0, components.month ?? 0, components.day ?? 0)
 }

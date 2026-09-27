@@ -18,7 +18,6 @@ let menuBarSurfaceHorizontalInset: CGFloat = standardGap
 let menuBarFloatingSurfaceOutset: CGFloat = menuBarFloatingSurfaceVerticalInset * 2
 let menuBarSurfaceCornerRadius: CGFloat = WinMuxBarStyle.cornerRadius
 private let menuBarChartSize = CGSize(width: 360, height: 216)
-private let menuBarBreakPotSize = CGSize(width: 320, height: 132)
 
 enum MenuBarStatusChartKind: Hashable, CaseIterable {
     case breakPot
@@ -27,7 +26,7 @@ enum MenuBarStatusChartKind: Hashable, CaseIterable {
 
     var panelSize: CGSize {
         switch self {
-            case .breakPot: menuBarBreakPotSize
+            case .breakPot: .zero
             case .sleep, .spending: menuBarChartSize
         }
     }
@@ -142,6 +141,11 @@ public final class MenuBarStatusWidgetsController {
         anchorFrame: NSRect,
         screenNumber: NSNumber
     ) {
+        if kind == .breakPot {
+            chartPanel.closeChart()
+            MenuBarBreakPotMenu.shared.show(at: anchorFrame)
+            return
+        }
         chartPanel.toggle(
             kind: kind,
             anchorFrame: anchorFrame,
@@ -165,6 +169,10 @@ public final class MenuBarStatusWidgetsController {
             return
         }
         chartPanel.closeChart()
+    }
+
+    fileprivate func isBreakPotPoint(_ point: NSPoint) -> Bool {
+        chartFrames[.breakPot]?.values.contains(where: { $0.contains(point) }) == true
     }
 
     private func refresh() {
@@ -230,10 +238,16 @@ private final class MenuBarStatusWidgetPanel: NSPanelHud {
         // cannot also open. Route once here, independently of SwiftUI hit testing.
         switch event.type {
             case .leftMouseDown:
-                MenuBarStatusWidgetsController.shared.handleChartClick(
-                    at: convertToScreen(NSRect(origin: event.locationInWindow, size: .zero)).origin
-                )
-            case .leftMouseUp, .leftMouseDragged:
+                let point = convertToScreen(NSRect(origin: event.locationInWindow, size: .zero)).origin
+                if !MenuBarStatusWidgetsController.shared.isBreakPotPoint(point) {
+                    MenuBarStatusWidgetsController.shared.handleChartClick(at: point)
+                }
+            case .leftMouseUp:
+                let point = convertToScreen(NSRect(origin: event.locationInWindow, size: .zero)).origin
+                if MenuBarStatusWidgetsController.shared.isBreakPotPoint(point) {
+                    MenuBarStatusWidgetsController.shared.handleChartClick(at: point)
+                }
+            case .leftMouseDragged:
                 break
             default:
                 super.sendEvent(event)
@@ -548,7 +562,7 @@ final class MenuBarChartHitRegionView: NSView {
 
     private func updateAccessibilityLabel() {
         switch kind {
-            case .breakPot: setAccessibilityLabel("Show Break Pot options")
+            case .breakPot: setAccessibilityLabel("Show focus record menu")
             case .sleep: setAccessibilityLabel("Show sleep chart")
             case .spending: setAccessibilityLabel("Show spending chart")
         }
@@ -621,7 +635,7 @@ private struct MenuBarStatusChartView: View {
         Group {
             switch kind {
                 case .breakPot:
-                    MenuBarBreakPotActionsView()
+                    EmptyView()
                 case .sleep:
                     MenuBarSleepChart()
                 case .spending:
