@@ -105,6 +105,11 @@ struct TodayFocusSnapshot: Equatable, Sendable {
     let targetHours: Int
     let errorMessage: String?
     var days: [TodayFocusDay] = []
+    var monthFocusedSeconds: TimeInterval = 0
+
+    var weekFocusedSeconds: TimeInterval {
+        days.reduce(0) { $0 + $1.focusedSeconds }
+    }
 
     var focusedHours: Double {
         focusedSeconds / 3600
@@ -165,7 +170,9 @@ struct TodayFocusAggregator: Sendable {
             )
         }
 
-        guard let weekStart = calendar.dateInterval(of: .weekOfYear, for: now)?.start else {
+        guard let weekStart = calendar.dateInterval(of: .weekOfYear, for: now)?.start,
+              let monthStart = calendar.dateInterval(of: .month, for: now)?.start
+        else {
             return TodayFocusSnapshot(
                 focusedSeconds: 0,
                 targetHours: targetHours,
@@ -191,11 +198,16 @@ struct TodayFocusAggregator: Sendable {
             )
         }
         let focusedSeconds = days.first(where: \.isToday)?.focusedSeconds ?? 0
+        let monthFocusedSeconds = entries.reduce(TimeInterval(0)) { total, entry in
+            let overlap = min(entry.stop, now).timeIntervalSince(max(entry.start, monthStart))
+            return total + max(0, overlap)
+        }
         return TodayFocusSnapshot(
             focusedSeconds: focusedSeconds,
             targetHours: targetHours,
             errorMessage: nil,
             days: days,
+            monthFocusedSeconds: monthFocusedSeconds,
         )
     }
 }

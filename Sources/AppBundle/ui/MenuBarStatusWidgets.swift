@@ -408,26 +408,10 @@ struct MenuBarDailyFocusCapsule: View {
     let height: CGFloat
     @StateObject private var loader = WorkspaceSidebarTodayFocusLoader()
 
-    private var focusText: String {
-        guard let snapshot = loader.snapshot, snapshot.errorMessage == nil else { return "—" }
-        let minutes = max(0, Int(snapshot.focusedSeconds / 60))
-        return "\(minutes / 60)h \(minutes % 60)m"
-    }
-
     var body: some View {
-        HStack(spacing: menuBarWidgetSpacing) {
-            Image(systemName: "timer")
-                .font(.system(size: menuBarWidgetIconSize, weight: menuBarWidgetFontWeight))
-                .frame(width: menuBarWidgetIconFrame, height: menuBarWidgetIconFrame)
-                .foregroundStyle(menuBarWidgetIcon)
-            Text(focusText)
-                .font(.system(size: menuBarWidgetFontSize, weight: menuBarWidgetFontWeight))
-                .monospacedDigit()
+        TimelineView(.periodic(from: .now, by: 60)) { context in
+            MenuBarFocusProgressContent(snapshot: loader.snapshot, now: context.date, height: height)
         }
-        .menuBarWidgetItem(height: height)
-        .help("Daily focus: \(focusText)")
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(Text("Daily focus, \(focusText)"))
         .task {
             await loader.refreshContinuously(
                 dataSource: URL(filePath: menuBarWidgetDataPath, directoryHint: .isDirectory)

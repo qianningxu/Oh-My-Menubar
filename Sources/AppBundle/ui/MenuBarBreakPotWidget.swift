@@ -13,6 +13,28 @@ private enum MenuBarFocusType: String, CaseIterable {
     case carefree = "不管不顾"
 }
 
+private struct MenuBarLotusIcon: Shape {
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        path.move(to: CGPoint(x: 8, y: 10))
+        path.addCurve(to: CGPoint(x: 8, y: 2), control1: CGPoint(x: 5.5, y: 8), control2: CGPoint(x: 6, y: 4.5))
+        path.addCurve(to: CGPoint(x: 8, y: 10), control1: CGPoint(x: 10, y: 4.5), control2: CGPoint(x: 10.5, y: 8))
+
+        path.move(to: CGPoint(x: 6.6, y: 10.6))
+        path.addCurve(to: CGPoint(x: 1.8, y: 5.7), control1: CGPoint(x: 3.3, y: 10.3), control2: CGPoint(x: 2.3, y: 8.4))
+        path.addCurve(to: CGPoint(x: 5.8, y: 8), control1: CGPoint(x: 3.7, y: 6), control2: CGPoint(x: 5, y: 6.8))
+
+        path.move(to: CGPoint(x: 9.4, y: 10.6))
+        path.addCurve(to: CGPoint(x: 14.2, y: 5.7), control1: CGPoint(x: 12.7, y: 10.3), control2: CGPoint(x: 13.7, y: 8.4))
+        path.addCurve(to: CGPoint(x: 10.2, y: 8), control1: CGPoint(x: 12.3, y: 6), control2: CGPoint(x: 11, y: 6.8))
+
+        path.move(to: CGPoint(x: 2, y: 12))
+        path.addCurve(to: CGPoint(x: 14, y: 12), control1: CGPoint(x: 5, y: 14.7), control2: CGPoint(x: 11, y: 14.7))
+        return path.applying(CGAffineTransform(scaleX: rect.width / 16, y: rect.height / 16)
+            .translatedBy(x: rect.minX, y: rect.minY))
+    }
+}
+
 @MainActor
 private final class MenuBarBreakPotModel: ObservableObject {
     static let shared = MenuBarBreakPotModel()
@@ -60,10 +82,9 @@ struct MenuBarBreakPotWidget: View {
     var body: some View {
         TimelineView(.periodic(from: menuBarBreakPotTimelineStart, by: menuBarBreakPotRefreshInterval)) { context in
             HStack(spacing: menuBarWidgetSpacing) {
-                Image(systemName: "dot.scope")
-                    .font(.system(size: menuBarWidgetIconSize, weight: .medium))
+                MenuBarLotusIcon()
+                    .stroke(menuBarWidgetIcon, style: StrokeStyle(lineWidth: 1.35, lineCap: .round, lineJoin: .round))
                     .frame(width: menuBarWidgetIconFrame, height: menuBarWidgetIconFrame)
-                    .foregroundStyle(menuBarWidgetIcon)
                 Text(displayText(at: context.date))
                     .font(.system(size: menuBarWidgetFontSize, weight: menuBarWidgetFontWeight))
                     .monospacedDigit()

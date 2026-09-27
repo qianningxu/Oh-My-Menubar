@@ -112,6 +112,8 @@ final class WorkspaceSidebarTodayFocusWidgetTest: XCTestCase {
 
         assertNil(snapshot.errorMessage)
         XCTAssertEqual(snapshot.focusedSeconds, 3 * 3600, accuracy: 1)
+        XCTAssertEqual(snapshot.weekFocusedSeconds, 4 * 3600, accuracy: 1)
+        XCTAssertEqual(snapshot.monthFocusedSeconds, 4 * 3600, accuracy: 1)
         assertEquals(snapshot.targetHours, 11)
         assertEquals(snapshot.percentage, 27)
         XCTAssertEqual(snapshot.days.count, 7)
@@ -119,6 +121,37 @@ final class WorkspaceSidebarTodayFocusWidgetTest: XCTestCase {
         XCTAssertEqual(snapshot.days.firstIndex(where: \.isToday), 2)
         XCTAssertEqual(snapshot.days.filter(\.isFuture).count, 4)
         XCTAssertEqual(snapshot.averageFocusedSeconds, 4 * 3600 / 3, accuracy: 1)
+    }
+
+    func testMonthTotalStartsAtFirstDayAndClipsAtNow() throws {
+        let previousTimeZone = NSTimeZone.default
+        NSTimeZone.default = try XCTUnwrap(TimeZone(secondsFromGMT: 0))
+        defer { NSTimeZone.default = previousTimeZone }
+
+        let dataDirectory = FileManager.default.temporaryDirectory
+            .appending(component: "winmux-month-focus-\(UUID().uuidString)", directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: dataDirectory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dataDirectory) }
+
+        let sqliteURL = dataDirectory.appending(component: "self_data.sqlite")
+        try makeDatabase(at: sqliteURL)
+        try execute(
+            """
+            insert into time_entries (project_id, start_at_utc, stop_at_utc, duration_seconds) values
+                (1, '2026-08-31T23:00:00Z', '2026-09-01T01:00:00Z', 7200),
+                (1, '2026-09-01T08:00:00Z', '2026-09-01T11:00:00Z', 10800),
+                (1, '2026-09-01T12:00:00Z', '2026-09-01T14:00:00Z', 7200);
+            """,
+            at: sqliteURL,
+        )
+
+        let now = try XCTUnwrap(ISO8601DateFormatter().date(from: "2026-09-01T13:00:00Z"))
+        let snapshot = TodayFocusAggregator(dataSource: dataDirectory).load(now: now)
+
+        assertNil(snapshot.errorMessage)
+        XCTAssertEqual(snapshot.focusedSeconds, 5 * 3600, accuracy: 1)
+        XCTAssertEqual(snapshot.weekFocusedSeconds, 6 * 3600, accuracy: 1)
+        XCTAssertEqual(snapshot.monthFocusedSeconds, 5 * 3600, accuracy: 1)
     }
 
     func testAggregatorReportsMissingSelfData() {
