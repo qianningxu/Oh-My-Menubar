@@ -27,7 +27,7 @@ enum MenuBarStatusChartKind: Hashable, CaseIterable {
 
     var panelSize: CGSize {
         switch self {
-            case .focusRuns: CGSize(width: 480, height: menuBarChartSize.height + WinMuxSpacing.page * 2)
+            case .focusRuns: menuBarChartSize
             case .breakPot: .zero
             case .sleep, .spending: menuBarChartSize
         }
@@ -827,13 +827,13 @@ private struct MenuBarFocusCalendarMonth: View {
                                 HStack(spacing: WinMuxSpacing.hairline) {
                                     Rectangle()
                                         .fill(workspaceSidebarWidgetSemanticColor(band.family, .color4))
-                                        .frame(width: WinMuxSpacing.regular, height: WinMuxSpacing.regular)
+                                        .frame(width: WinMuxSpacing.section, height: WinMuxSpacing.section)
                                         .overlay {
                                             Rectangle()
                                                 .strokeBorder(workspaceSidebarWidgetSemanticColor(.gray, .color5), lineWidth: 0.5)
                                         }
                                     Text("\(percentages[band.rawValue])%")
-                                        .font(.system(size: menuBarWidgetFontSize * 0.75, weight: .medium, design: .monospaced))
+                                        .font(.system(size: menuBarWidgetFontSize, weight: .medium, design: .monospaced))
                                         .foregroundStyle(workspaceSidebarWidgetContent(.secondary))
                                 }
                             }
@@ -895,31 +895,17 @@ private struct MenuBarFocusCalendarDay: View {
     let isFuture: Bool
     let isBreak: Bool
 
-    private var roundedHours: Int {
-        menuBarRoundedFocusHours(hours)
-    }
-
     private var backgroundColor: WorkspaceSidebarWidgetShapeStyle? {
         if isBreak || isFuture { return nil }
         return workspaceSidebarWidgetSemanticColor(MenuBarFocusCalendarBand.forHours(hours).family, .color4)
     }
 
     var body: some View {
-        let isCompact = height < WinMuxSpacing.page + WinMuxSpacing.regular
-        ZStack(alignment: .topLeading) {
-            Text(date.formatted(.dateTime.day()))
-                .font(.system(size: menuBarWidgetFontSize * (isCompact ? 0.65 : 0.75), weight: .medium))
-                .foregroundStyle(workspaceSidebarWidgetSemanticColor(.gray, .color9))
-                .padding(.top, WinMuxSpacing.hairline)
-                .padding(.leading, WinMuxSpacing.compact)
-            if !isFuture {
-                Text("\(roundedHours)h")
-                    .font(.system(size: menuBarWidgetFontSize * (isCompact ? 0.8 : 0.95), weight: .medium))
-                    .foregroundStyle(workspaceSidebarWidgetSemanticColor(.gray, .color10))
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .offset(y: isCompact ? WinMuxSpacing.hairline : WinMuxSpacing.compact)
-            }
-        }
+        Text(date.formatted(.dateTime.day()))
+            .font(.system(size: menuBarWidgetFontSize * 0.75, weight: .medium))
+            .foregroundStyle(workspaceSidebarWidgetSemanticColor(.gray, .color9))
+            .padding(.top, WinMuxSpacing.hairline)
+            .padding(.leading, WinMuxSpacing.compact)
         .frame(maxWidth: .infinity, alignment: .leading)
         .frame(height: height, alignment: .top)
         .background {
