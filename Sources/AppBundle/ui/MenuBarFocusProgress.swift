@@ -1,7 +1,7 @@
 import Foundation
 import SwiftUI
 
-private let menuBarFocusProgressBarWidth = standardGap * 24
+private let menuBarFocusProgressBarWidth = standardGap * 21
 
 enum MenuBarFocusPeriod: String, CaseIterable, Identifiable {
     case day
