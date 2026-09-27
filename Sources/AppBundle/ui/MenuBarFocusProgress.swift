@@ -85,18 +85,20 @@ struct MenuBarFocusProgressContent: View {
     }
 
     var body: some View {
-        let period = MenuBarFocusPeriod.day
-
         HStack(spacing: menuBarWidgetSpacing) {
             Image(systemName: "dot.scope")
                 .font(.system(size: menuBarWidgetIconSize, weight: .medium))
                 .frame(width: menuBarWidgetIconFrame, height: menuBarWidgetIconFrame)
                 .foregroundStyle(menuBarWidgetIcon)
 
-            MenuBarFocusPeriodProgress(
-                period: period,
-                focusedSeconds: snapshot?.errorMessage == nil ? snapshot.map { period.focusedSeconds(in: $0) } : nil
-            )
+            HStack(spacing: WinMuxSpacing.section) {
+                ForEach(MenuBarFocusPeriod.allCases) { period in
+                    MenuBarFocusPeriodProgress(
+                        period: period,
+                        focusedSeconds: snapshot?.errorMessage == nil ? snapshot.map { period.focusedSeconds(in: $0) } : nil
+                    )
+                }
+            }
         }
         .menuBarWidgetItem(height: height, chartKind: .focusRuns)
         .accessibilityElement(children: .contain)
