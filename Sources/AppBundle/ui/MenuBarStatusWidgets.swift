@@ -694,8 +694,6 @@ private enum MenuBarFocusRunMetric: Int, CaseIterable, Identifiable {
     case totalHours
     case averageHoursPerDay
 
-    static let totalHoursPlotScale = 3.0
-
     var id: Int { rawValue }
 
     var title: String {
@@ -712,11 +710,8 @@ private enum MenuBarFocusRunMetric: Int, CaseIterable, Identifiable {
         }
     }
 
-    var family: WorkspaceSidebarProjectThemeFamily {
-        switch self {
-            case .totalHours: .blue
-            case .averageHoursPerDay: .teal
-        }
+    var chartColor: WorkspaceSidebarWidgetShapeStyle {
+        workspaceSidebarWidgetSemanticColor(.gray, self == .totalHours ? .color10 : .color7)
     }
 
     func value(for span: MenuBarFocusRunSpan) -> Double {
@@ -726,8 +721,12 @@ private enum MenuBarFocusRunMetric: Int, CaseIterable, Identifiable {
         }
     }
 
-    func plottedValue(for span: MenuBarFocusRunSpan) -> Double {
-        self == .totalHours ? value(for: span) / Self.totalHoursPlotScale : value(for: span)
+    func plottedValue(for span: MenuBarFocusRunSpan, among spans: [MenuBarFocusRunSpan]) -> Double {
+        let values = spans.map { value(for: $0) }
+        let minimum = values.min() ?? 0
+        let maximum = values.max() ?? 0
+        let fraction = maximum > minimum ? (value(for: span) - minimum) / (maximum - minimum) : 0.5
+        return (self == .totalHours ? 6.0 : 1.0) + fraction * 3.0
     }
 
     func roundedLegendValue(for span: MenuBarFocusRunSpan) -> String {
@@ -743,29 +742,18 @@ private enum MenuBarFocusRunMetric: Int, CaseIterable, Identifiable {
     }
 }
 
+private struct MenuBarFocusRunPlotPoint: Identifiable {
+    let id: Int
+    let span: MenuBarFocusRunSpan
+}
+
 private struct MenuBarFocusRunTrends: View {
     let now: Date
 
-    private func dateDomain(for spans: [MenuBarFocusRunSpan]) -> ClosedRange<Date> {
-        let first = spans.first?.start ?? now
-        let last = spans.last?.start ?? first
+    private func startDateLabel(at index: Int, spans: [MenuBarFocusRunSpan]) -> String {
         let calendar = Calendar.current
-        let lower = calendar.date(byAdding: .day, value: -1, to: first) ?? first
-        let upper = calendar.date(byAdding: .day, value: 3, to: last) ?? last
-        return lower ... upper
-    }
-
-    private func upperBound(for spans: [MenuBarFocusRunSpan]) -> Double {
-        let values = MenuBarFocusRunMetric.allCases.flatMap { metric in
-            spans.map { metric.plottedValue(for: $0) }
-        }
-        return max(1, ceil((values.max() ?? 0) * 1.1))
-    }
-
-    private func startDateLabel(_ date: Date, spans: [MenuBarFocusRunSpan]) -> String {
-        let calendar = Calendar.current
-        guard let index = spans.firstIndex(where: { calendar.isDate($0.start, inSameDayAs: date) }) else { return "" }
-        let day = calendar.component(.day, from: date)
+        guard spans.indices.contains(index) else { return "" }
+        let day = calendar.component(.day, from: spans[index].start)
         guard index > 0 else { return "\(day)" }
         let daysSincePreviousStart = calendar.dateComponents(
             [.day],
@@ -777,80 +765,83 @@ private struct MenuBarFocusRunTrends: View {
 
     var body: some View {
         let spans = (MenuBarFocusRecord.spansInMonth(now: now) ?? []).filter { $0.run.focusHours != nil }
+        let points = spans.enumerated().map { MenuBarFocusRunPlotPoint(id: $0.offset, span: $0.element) }
         VStack(alignment: .leading, spacing: WinMuxSpacing.compact) {
-            HStack {
+            HStack(alignment: .top, spacing: WinMuxSpacing.regular) {
                 Text("Runs")
                     .font(.system(size: menuBarWidgetFontSize, weight: .medium))
                     .foregroundStyle(workspaceSidebarWidgetContent(.primary))
-                Spacer()
+                Spacer(minLength: WinMuxSpacing.compact)
                 if let latest = spans.last {
-                    Text("Latest \(latest.start.formatted(.dateTime.day().month(.abbreviated)))")
-                        .font(.system(size: menuBarWidgetFontSize * 0.75))
-                        .foregroundStyle(workspaceSidebarWidgetContent(.secondary))
+                    VStack(alignment: .leading, spacing: WinMuxSpacing.hairline) {
+                        ForEach(MenuBarFocusRunMetric.allCases) { metric in
+                            HStack(spacing: WinMuxSpacing.hairline) {
+                                Circle()
+                                    .fill(metric.chartColor)
+                                    .frame(width: WinMuxSpacing.regular, height: WinMuxSpacing.regular)
+                                Text("\(metric.legendTitle) \(metric.roundedLegendValue(for: latest))")
+                                    .font(.system(size: menuBarWidgetFontSize * 0.75, weight: .medium))
+                                    .foregroundStyle(workspaceSidebarWidgetContent(.secondary))
+                            }
+                        }
+                    }
                 }
             }
-            .frame(height: WinMuxSpacing.panel, alignment: .top)
+            .frame(height: WinMuxSpacing.panel * 2, alignment: .top)
 
             if spans.isEmpty {
                 Text("No completed runs this month")
                     .font(.system(size: menuBarWidgetFontSize * 0.75))
                     .foregroundStyle(workspaceSidebarWidgetContent(.secondary))
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else if let latest = spans.last {
-                HStack(spacing: WinMuxSpacing.regular) {
-                    ForEach(MenuBarFocusRunMetric.allCases) { metric in
-                        HStack(spacing: WinMuxSpacing.hairline) {
-                            Circle()
-                                .fill(workspaceSidebarWidgetSemanticColor(metric.family, .color9))
-                                .frame(width: WinMuxSpacing.regular, height: WinMuxSpacing.regular)
-                            Text("\(metric.legendTitle) \(metric.roundedLegendValue(for: latest))")
-                                .font(.system(size: menuBarWidgetFontSize * 0.75, weight: .medium))
+            } else {
+                VStack(spacing: WinMuxSpacing.none) {
+                    Chart {
+                        RuleMark(y: .value("Band separator", 5))
+                            .foregroundStyle(workspaceSidebarWidgetSemanticColor(.gray, .color5))
+                            .lineStyle(StrokeStyle(lineWidth: 0.5, dash: [2, 2]))
+
+                        ForEach(MenuBarFocusRunMetric.allCases) { metric in
+                            ForEach(points) { point in
+                                LineMark(
+                                    x: .value("Start date", Double(point.id)),
+                                    y: .value(metric.title, metric.plottedValue(for: point.span, among: spans)),
+                                    series: .value("Metric", metric.title)
+                                )
+                                .lineStyle(StrokeStyle(lineWidth: 2))
+                                .foregroundStyle(metric.chartColor)
+
+                                PointMark(
+                                    x: .value("Start date", Double(point.id)),
+                                    y: .value(metric.title, metric.plottedValue(for: point.span, among: spans))
+                                )
+                                .symbolSize(20)
+                                .foregroundStyle(metric.chartColor)
+                                .annotation(position: metric == .totalHours ? .top : .bottom, spacing: WinMuxSpacing.hairline) {
+                                    Text("\(metric.roundedFigure(for: point.span))")
+                                        .font(.system(size: menuBarWidgetFontSize * 0.7, weight: .medium, design: .monospaced))
+                                        .foregroundStyle(metric.chartColor)
+                                }
+                            }
+                        }
+                    }
+                    .chartXScale(domain: -0.5 ... Double(points.count) - 0.5)
+                    .chartYScale(domain: 0 ... 10)
+                    .chartXAxis(.hidden)
+                    .chartYAxis(.hidden)
+                    .chartLegend(.hidden)
+                    .frame(height: WinMuxSpacing.panel * 10)
+
+                    HStack(spacing: WinMuxSpacing.none) {
+                        ForEach(points) { point in
+                            Text(startDateLabel(at: point.id, spans: spans))
+                                .font(.system(size: menuBarWidgetFontSize * 0.7, weight: .regular, design: .monospaced))
                                 .foregroundStyle(workspaceSidebarWidgetContent(.secondary))
+                                .frame(maxWidth: .infinity)
                         }
                     }
+                    .frame(height: WinMuxSpacing.panel)
                 }
-
-                Chart {
-                    ForEach(MenuBarFocusRunMetric.allCases) { metric in
-                        ForEach(spans, id: \.run.id) { span in
-                            LineMark(
-                                x: .value("Start date", span.start),
-                                y: .value(metric.title, metric.plottedValue(for: span)),
-                                series: .value("Metric", metric.title)
-                            )
-                            .lineStyle(StrokeStyle(lineWidth: 2))
-                            .foregroundStyle(workspaceSidebarWidgetSemanticColor(metric.family, .color9))
-
-                            PointMark(
-                                x: .value("Start date", span.start),
-                                y: .value(metric.title, metric.plottedValue(for: span))
-                            )
-                            .symbolSize(20)
-                            .foregroundStyle(workspaceSidebarWidgetSemanticColor(metric.family, .color9))
-                            .annotation(position: metric == .totalHours ? .top : .bottom, spacing: WinMuxSpacing.hairline) {
-                                Text("\(metric.roundedFigure(for: span))")
-                                    .font(.system(size: menuBarWidgetFontSize * 0.7, weight: .medium, design: .monospaced))
-                                    .foregroundStyle(workspaceSidebarWidgetSemanticColor(metric.family, .color9))
-                            }
-                        }
-                    }
-                }
-                .chartXScale(domain: dateDomain(for: spans))
-                .chartYScale(domain: 0 ... upperBound(for: spans))
-                .chartXAxis {
-                    AxisMarks(values: spans.map(\.start)) { value in
-                        AxisValueLabel {
-                            if let date = value.as(Date.self) {
-                                Text(startDateLabel(date, spans: spans))
-                                    .font(.system(size: menuBarWidgetFontSize * 0.7, weight: .regular, design: .monospaced))
-                            }
-                        }
-                        .foregroundStyle(workspaceSidebarWidgetContent(.secondary))
-                    }
-                }
-                .chartYAxis(.hidden)
-                .chartLegend(.hidden)
-                .frame(height: WinMuxSpacing.panel * 11)
             }
         }
     }
@@ -996,7 +987,7 @@ private struct MenuBarFocusCalendarMonth: View {
                             ForEach(MenuBarFocusCalendarBand.allCases, id: \.self) { band in
                                 HStack(spacing: WinMuxSpacing.hairline) {
                                     Rectangle()
-                                        .fill(workspaceSidebarWidgetSemanticColor(band.family, .color4))
+                                        .fill(workspaceSidebarWidgetSemanticColor(band.family, .color3))
                                         .frame(width: WinMuxSpacing.section, height: WinMuxSpacing.section)
                                         .overlay {
                                             Rectangle()
@@ -1066,8 +1057,9 @@ private struct MenuBarFocusCalendarDay: View {
     let isBreak: Bool
 
     private var backgroundColor: WorkspaceSidebarWidgetShapeStyle? {
-        if isBreak || isFuture { return nil }
-        return workspaceSidebarWidgetSemanticColor(MenuBarFocusCalendarBand.forHours(hours).family, .color4)
+        if isFuture { return nil }
+        if isBreak { return workspaceSidebarWidgetSemanticColor(.gray, .color3) }
+        return workspaceSidebarWidgetSemanticColor(MenuBarFocusCalendarBand.forHours(hours).family, .color3)
     }
 
     var body: some View {
