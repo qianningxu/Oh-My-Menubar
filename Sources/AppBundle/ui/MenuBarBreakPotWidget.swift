@@ -5,6 +5,7 @@ import SwiftUI
 private let menuBarBreakPotRefreshInterval: TimeInterval = 15 * 60
 private let menuBarBreakPotTimelineStart = Date(timeIntervalSinceReferenceDate: 0)
 private let menuBarFocusRecordURL = URL(filePath: "/Users/side/Documents/now/my_app/self/self_ob/Others/Focus record.md")
+private let menuBarTogglConfigURL = URL(filePath: "/Users/side/Documents/now/my_app/self/self_data/service/src/toggl/import-entries/data.json")
 
 private enum MenuBarFocusType: String, CaseIterable {
     case quietNight = "宁静夜晚"
@@ -18,6 +19,7 @@ private final class MenuBarBreakPotModel: ObservableObject {
 
     @Published private(set) var anchorAt: Date
     private var nextRefreshAt = Date.distantPast
+    private var isRecording = false
 
     private init() {
         anchorAt = MenuBarFocusRecord.nextStart() ?? Calendar.current.startOfDay(for: .now)
@@ -30,13 +32,16 @@ private final class MenuBarBreakPotModel: ObservableObject {
         anchorAt = MenuBarFocusRecord.nextStart() ?? Calendar.current.startOfDay(for: now)
     }
 
-    func record(_ type: MenuBarFocusType) throws {
+    func record(_ type: MenuBarFocusType) async throws {
+        guard !isRecording else { return }
+        isRecording = true
+        defer { isRecording = false }
         let now = Date()
         let start = MenuBarFocusRecord.nextStart() ?? Calendar.current.startOfDay(for: now)
         guard start <= now else { throw MenuBarFocusRecordError.alreadyRecordedToday }
-        guard let focusHours = menuBarBreakPotLocalBalance(from: start, to: now) else {
-            throw MenuBarFocusRecordError.focusHoursUnavailable
-        }
+        let focusHours = try await MenuBarTogglFocusSource.hours(from: start, to: now)
+        let currentStart = MenuBarFocusRecord.nextStart() ?? Calendar.current.startOfDay(for: now)
+        guard currentStart == start else { throw MenuBarFocusRecordError.recordChanged }
         try MenuBarFocusRecord.append(date: now, focusHours: focusHours, type: type.rawValue)
         anchorAt = MenuBarFocusRecord.nextDay(after: now)
         nextRefreshAt = now.addingTimeInterval(menuBarBreakPotRefreshInterval)
@@ -113,13 +118,15 @@ final class MenuBarBreakPotMenu: NSObject {
     @objc private func record(_ sender: NSMenuItem) {
         guard let rawValue = sender.representedObject as? String,
               let type = MenuBarFocusType(rawValue: rawValue) else { return }
-        do {
-            try MenuBarBreakPotModel.shared.record(type)
-        } catch {
-            let alert = NSAlert()
-            alert.messageText = "Could not record focus"
-            alert.informativeText = error.localizedDescription
-            alert.runModal()
+        Task { @MainActor in
+            do {
+                try await MenuBarBreakPotModel.shared.record(type)
+            } catch {
+                let alert = NSAlert()
+                alert.messageText = "Could not record focus"
+                alert.informativeText = error.localizedDescription
+                alert.runModal()
+            }
         }
     }
 }
@@ -139,11 +146,10 @@ enum MenuBarFocusRecord {
     }
 
     static func lastDate(in contents: String, calendar: Calendar = .current) -> Date? {
-        let formatter = dateFormatter(calendar: calendar)
-        return contents.split(whereSeparator: \.isNewline).compactMap { line -> Date? in
-            let cells = line.split(separator: "|", omittingEmptySubsequences: false)
-            guard cells.count == 5 else { return nil }
-            return formatter.date(from: cells[1].trimmingCharacters(in: .whitespaces))
+        let lines = contents.components(separatedBy: .newlines)
+        guard let headerIndex = tableHeaderIndex(in: lines) else { return nil }
+        return tableRows(in: lines, after: headerIndex).compactMap { row in
+            date(from: row[0], calendar: calendar)
         }.max()
     }
 
@@ -159,16 +165,62 @@ enum MenuBarFocusRecord {
         var contents = fileManager.fileExists(atPath: url.path)
             ? try String(contentsOf: url, encoding: .utf8)
             : header
-        guard contents.contains("| Date | Focus | Type |"),
-              contents.contains("| ---- | ----- | ---- |") else {
+        var lines = contents.components(separatedBy: .newlines)
+        guard let headerIndex = tableHeaderIndex(in: lines) else {
             throw MenuBarFocusRecordError.invalidTable
         }
-        contents = contents.replacingOccurrences(of: "|      |       |      |\n", with: "")
-        if !contents.hasSuffix("\n") { contents += "\n" }
         let dateText = dateFormatter(calendar: calendar).string(from: date)
         let hoursText = String(format: "%.2f h", locale: Locale(identifier: "en_US_POSIX"), focusHours)
-        contents += "| \(dateText) | \(hoursText) | \(type) |\n"
+        let firstRow = headerIndex + 2
+        var endRow = firstRow
+        while endRow < lines.count, tableCells(in: lines[endRow])?.count == 3 {
+            endRow += 1
+        }
+        let existingRows = lines[firstRow..<endRow].filter {
+            tableCells(in: $0) != ["", "", ""]
+        }
+        lines.replaceSubrange(firstRow..<endRow, with: existingRows + ["| \(dateText) | \(hoursText) | \(type) |"])
+        contents = lines.joined(separator: "\n")
+        if !contents.hasSuffix("\n") { contents += "\n" }
         try contents.write(to: url, atomically: true, encoding: .utf8)
+    }
+
+    private static func tableHeaderIndex(in lines: [String]) -> Int? {
+        lines.indices.first { index in
+            guard index + 1 < lines.count,
+                  tableCells(in: lines[index]) == ["Date", "Focus", "Type"],
+                  let separator = tableCells(in: lines[index + 1]),
+                  separator.count == 3 else { return false }
+            return separator.allSatisfy { cell in
+                cell.count >= 3 && cell.allSatisfy { $0 == "-" || $0 == ":" }
+            }
+        }
+    }
+
+    private static func tableRows(in lines: [String], after headerIndex: Int) -> [[String]] {
+        var rows: [[String]] = []
+        for line in lines.dropFirst(headerIndex + 2) {
+            guard let cells = tableCells(in: line), cells.count == 3 else { break }
+            rows.append(cells)
+        }
+        return rows
+    }
+
+    private static func tableCells(in line: String) -> [String]? {
+        let trimmed = line.trimmingCharacters(in: .whitespaces)
+        guard trimmed.first == "|", trimmed.last == "|" else { return nil }
+        return trimmed.dropFirst().dropLast().split(separator: "|", omittingEmptySubsequences: false)
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+    }
+
+    private static func date(from text: String, calendar: Calendar) -> Date? {
+        let parts = text.split(separator: "-")
+        guard parts.count == 3,
+              let year = Int(parts[0]), let month = Int(parts[1]), let day = Int(parts[2]),
+              let date = calendar.date(from: DateComponents(year: year, month: month, day: day))
+        else { return nil }
+        let actual = calendar.dateComponents([.year, .month, .day], from: date)
+        return actual.year == year && actual.month == month && actual.day == day ? date : nil
     }
 
     private static func dateFormatter(calendar: Calendar) -> DateFormatter {
@@ -179,6 +231,91 @@ enum MenuBarFocusRecord {
         formatter.isLenient = false
         formatter.dateFormat = "yyyy-MM-dd"
         return formatter
+    }
+}
+
+@MainActor
+private enum MenuBarTogglFocusSource {
+    static func hours(from start: Date, to finish: Date) async throws -> Double {
+        guard let configData = try? Data(contentsOf: menuBarTogglConfigURL),
+              let config = try? JSONSerialization.jsonObject(with: configData) as? [String: Any],
+              let token = config["apiToken"] as? String,
+              !token.isEmpty else { throw MenuBarFocusRecordError.togglCredentialsUnavailable }
+
+        var components = URLComponents(string: "https://api.track.toggl.com/api/v9/me/time_entries")!
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime]
+        components.queryItems = [
+            URLQueryItem(name: "start_date", value: formatter.string(from: start.addingTimeInterval(-86_400))),
+            URLQueryItem(name: "end_date", value: formatter.string(from: finish)),
+        ]
+        guard let url = components.url,
+              let entries = try await fetchJSON(url, token: token) as? [[String: Any]]
+        else { throw MenuBarFocusRecordError.togglUnavailable }
+
+        let projectIDs = Set(entries.compactMap { ($0["pid"] ?? $0["project_id"]) as? Int })
+        var projectNames: [Int: String] = [:]
+        if !projectIDs.isEmpty {
+            let workspacesURL = URL(string: "https://api.track.toggl.com/api/v9/me/workspaces")!
+            guard let workspaces = try await fetchJSON(workspacesURL, token: token) as? [[String: Any]]
+            else { throw MenuBarFocusRecordError.togglUnavailable }
+            for workspace in workspaces {
+                guard let workspaceID = workspace["id"] as? Int,
+                      let projectsURL = URL(string: "https://api.track.toggl.com/api/v9/workspaces/\(workspaceID)/projects?active=both"),
+                      let projects = try await fetchJSON(projectsURL, token: token) as? [[String: Any]]
+                else { throw MenuBarFocusRecordError.togglUnavailable }
+                for project in projects {
+                    if let id = project["id"] as? Int, let name = project["name"] as? String {
+                        projectNames[id] = name
+                    }
+                }
+            }
+        }
+        guard projectIDs.allSatisfy({ projectNames[$0] != nil }) else {
+            throw MenuBarFocusRecordError.unknownTogglProject
+        }
+
+        let timeEntries = try entries.compactMap { entry -> SidebarSelfDataTimeEntry? in
+            guard let rawStart = entry["start"] as? String,
+                  let entryStart = parseDate(rawStart) else { throw MenuBarFocusRecordError.togglUnavailable }
+            let entryStop: Date
+            if let rawStop = entry["stop"] as? String {
+                guard let parsedStop = parseDate(rawStop) else { throw MenuBarFocusRecordError.togglUnavailable }
+                entryStop = parsedStop
+            } else {
+                entryStop = finish
+            }
+            guard entryStop > entryStart else { return nil }
+            let projectID = (entry["pid"] ?? entry["project_id"]) as? Int
+            return SidebarSelfDataTimeEntry(
+                start: entryStart,
+                stop: entryStop,
+                projectID: projectID.map(Int64.init),
+                projectName: projectID.flatMap { projectNames[$0] }
+            )
+        }
+        return menuBarBreakPotFocusHours(entries: timeEntries, from: start, to: finish)
+    }
+
+    private static func fetchJSON(_ url: URL, token: String) async throws -> Any {
+        var request = URLRequest(url: url)
+        request.timeoutInterval = 20
+        let authorization = Data("\(token):api_token".utf8).base64EncodedString()
+        request.setValue("Basic \(authorization)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
+            throw MenuBarFocusRecordError.togglUnavailable
+        }
+        return try JSONSerialization.jsonObject(with: data)
+    }
+
+    private static func parseDate(_ raw: String) -> Date? {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        if let date = formatter.date(from: raw) { return date }
+        formatter.formatOptions = [.withInternetDateTime]
+        return formatter.date(from: raw)
     }
 }
 
@@ -212,15 +349,21 @@ private func menuBarBreakPotElapsedText(anchorAt: Date, now: Date) -> String {
 }
 
 private enum MenuBarFocusRecordError: LocalizedError {
-    case focusHoursUnavailable
     case invalidTable
     case alreadyRecordedToday
+    case recordChanged
+    case togglCredentialsUnavailable
+    case togglUnavailable
+    case unknownTogglProject
 
     var errorDescription: String? {
         switch self {
-            case .focusHoursUnavailable: "Could not calculate focus hours from local Toggl data."
             case .invalidTable: "Focus record.md does not contain the Date, Focus, Type table."
             case .alreadyRecordedToday: "Focus has already been recorded for today."
+            case .recordChanged: "Focus record.md changed while loading Toggl data. Try again."
+            case .togglCredentialsUnavailable: "Could not read the local Toggl API token."
+            case .togglUnavailable: "Could not load current focus entries from Toggl. Try again when Toggl is available."
+            case .unknownTogglProject: "A Toggl project could not be identified, so focus was not recorded."
         }
     }
 }

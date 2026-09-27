@@ -29,6 +29,28 @@ final class MenuBarBreakPotWidgetTest: XCTestCase {
         XCTAssertFalse(contents.contains("|      |       |      |"))
     }
 
+    func testAlignedTableAndNonPaddedDateRemainUsable() throws {
+        let url = FileManager.default.temporaryDirectory.appending(component: UUID().uuidString + ".md")
+        defer { try? FileManager.default.removeItem(at: url) }
+        let original = """
+        | Date       | Focus   | Type |
+        | ---------- | ------- | ---- |
+        | 2026-9-26  | 26.55 h | 宁静夜晚 |
+
+        Some later note.
+        """
+        try original.write(to: url, atomically: true, encoding: .utf8)
+        let london = try XCTUnwrap(TimeZone(identifier: "Europe/London"))
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = london
+        let nextStart = try XCTUnwrap(MenuBarFocusRecord.nextStart(at: url, calendar: calendar))
+        XCTAssertEqual(calendar.dateComponents([.year, .month, .day], from: nextStart).day, 27)
+        let date = try XCTUnwrap(ISO8601DateFormatter().date(from: "2026-09-27T08:00:00Z"))
+        try MenuBarFocusRecord.append(date: date, focusHours: 1.25, type: "晚起早退", at: url, calendar: calendar)
+        let contents = try String(contentsOf: url, encoding: .utf8)
+        XCTAssertTrue(contents.contains("| 2026-09-27 | 1.25 h | 晚起早退 |\n\nSome later note."))
+    }
+
     func testFocusTotalClipsToNewPeriodAndExcludesBreak() throws {
         let formatter = ISO8601DateFormatter()
         let start = try XCTUnwrap(formatter.date(from: "2026-09-23T00:00:00Z"))
