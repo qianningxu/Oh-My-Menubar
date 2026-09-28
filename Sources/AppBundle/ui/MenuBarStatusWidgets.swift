@@ -697,58 +697,6 @@ private struct MenuBarFocusCalendar: View {
     }
 }
 
-private enum MenuBarFocusRunMetric: Int, CaseIterable, Identifiable {
-    case totalHours
-    case averageHoursPerDay
-
-    var id: Int { rawValue }
-
-    var title: String {
-        switch self {
-            case .totalHours: "Total h"
-            case .averageHoursPerDay: "Avg h/day"
-        }
-    }
-
-    var legendTitle: String {
-        switch self {
-            case .totalHours: "Total"
-            case .averageHoursPerDay: "Avg"
-        }
-    }
-
-    var chartColor: WorkspaceSidebarWidgetShapeStyle {
-        workspaceSidebarWidgetSemanticColor(.gray, self == .totalHours ? .color10 : .color7)
-    }
-
-    func value(for span: MenuBarFocusRunSpan) -> Double {
-        switch self {
-            case .totalHours: span.run.focusHours ?? 0
-            case .averageHoursPerDay: span.dailyAverageHours ?? 0
-        }
-    }
-
-    func plottedValue(for span: MenuBarFocusRunSpan, among spans: [MenuBarFocusRunSpan]) -> Double {
-        let values = spans.map { value(for: $0) }
-        let minimum = values.min() ?? 0
-        let maximum = values.max() ?? 0
-        let fraction = maximum > minimum ? (value(for: span) - minimum) / (maximum - minimum) : 0.5
-        return (self == .totalHours ? 6.0 : 1.0) + fraction * 3.0
-    }
-
-    func roundedLegendValue(for span: MenuBarFocusRunSpan) -> String {
-        let rounded = roundedFigure(for: span)
-        return switch self {
-            case .totalHours: "\(rounded)h"
-            case .averageHoursPerDay: "\(rounded)h/day"
-        }
-    }
-
-    func roundedFigure(for span: MenuBarFocusRunSpan) -> Int {
-        Int(value(for: span).rounded(.toNearestOrAwayFromZero))
-    }
-}
-
 private struct MenuBarFocusRunPlotPoint: Identifiable {
     let id: Int
     let span: MenuBarFocusRunSpan
@@ -756,6 +704,10 @@ private struct MenuBarFocusRunPlotPoint: Identifiable {
 
 private struct MenuBarFocusRunTrends: View {
     let now: Date
+
+    private func roundedAverage(for span: MenuBarFocusRunSpan) -> Int {
+        Int((span.dailyAverageHours ?? 0).rounded(.toNearestOrAwayFromZero))
+    }
 
     private func startDateLabel(at index: Int, spans: [MenuBarFocusRunSpan]) -> String {
         let calendar = Calendar.current
@@ -773,6 +725,8 @@ private struct MenuBarFocusRunTrends: View {
     var body: some View {
         let spans = (MenuBarFocusRecord.spansInMonth(now: now) ?? []).filter { $0.run.focusHours != nil }
         let points = spans.enumerated().map { MenuBarFocusRunPlotPoint(id: $0.offset, span: $0.element) }
+        let averageColor = workspaceSidebarWidgetSemanticColor(.gray, .color7)
+        let chartMaximum = max(1, ceil(spans.map { $0.dailyAverageHours ?? 0 }.max() ?? 0) + 1)
         VStack(alignment: .leading, spacing: WinMuxSpacing.compact) {
             HStack(alignment: .top, spacing: WinMuxSpacing.regular) {
                 Text("Runs")
@@ -780,17 +734,13 @@ private struct MenuBarFocusRunTrends: View {
                     .foregroundStyle(workspaceSidebarWidgetContent(.primary))
                 Spacer(minLength: WinMuxSpacing.compact)
                 if let latest = spans.last {
-                    VStack(alignment: .leading, spacing: WinMuxSpacing.hairline) {
-                        ForEach(MenuBarFocusRunMetric.allCases) { metric in
-                            HStack(spacing: WinMuxSpacing.hairline) {
-                                Circle()
-                                    .fill(metric.chartColor)
-                                    .frame(width: WinMuxSpacing.regular, height: WinMuxSpacing.regular)
-                                Text("\(metric.legendTitle) \(metric.roundedLegendValue(for: latest))")
-                                    .font(.system(size: menuBarWidgetFontSize * 0.75, weight: .medium))
-                                    .foregroundStyle(workspaceSidebarWidgetContent(.secondary))
-                            }
-                        }
+                    HStack(spacing: WinMuxSpacing.hairline) {
+                        Circle()
+                            .fill(averageColor)
+                            .frame(width: WinMuxSpacing.regular, height: WinMuxSpacing.regular)
+                        Text("Avg \(roundedAverage(for: latest))h/day")
+                            .font(.system(size: menuBarWidgetFontSize * 0.75, weight: .medium))
+                            .foregroundStyle(workspaceSidebarWidgetContent(.secondary))
                     }
                 }
             }
@@ -804,36 +754,29 @@ private struct MenuBarFocusRunTrends: View {
             } else {
                 VStack(spacing: WinMuxSpacing.none) {
                     Chart {
-                        RuleMark(y: .value("Band separator", 5))
-                            .foregroundStyle(workspaceSidebarWidgetSemanticColor(.gray, .color5))
-                            .lineStyle(StrokeStyle(lineWidth: 0.5, dash: [2, 2]))
+                        ForEach(points) { point in
+                            LineMark(
+                                x: .value("Start date", Double(point.id)),
+                                y: .value("Avg h/day", point.span.dailyAverageHours ?? 0)
+                            )
+                            .lineStyle(StrokeStyle(lineWidth: 2))
+                            .foregroundStyle(averageColor)
 
-                        ForEach(MenuBarFocusRunMetric.allCases) { metric in
-                            ForEach(points) { point in
-                                LineMark(
-                                    x: .value("Start date", Double(point.id)),
-                                    y: .value(metric.title, metric.plottedValue(for: point.span, among: spans)),
-                                    series: .value("Metric", metric.title)
-                                )
-                                .lineStyle(StrokeStyle(lineWidth: 2))
-                                .foregroundStyle(metric.chartColor)
-
-                                PointMark(
-                                    x: .value("Start date", Double(point.id)),
-                                    y: .value(metric.title, metric.plottedValue(for: point.span, among: spans))
-                                )
-                                .symbolSize(20)
-                                .foregroundStyle(metric.chartColor)
-                                .annotation(position: metric == .totalHours ? .top : .bottom, spacing: WinMuxSpacing.hairline) {
-                                    Text("\(metric.roundedFigure(for: point.span))")
-                                        .font(.system(size: menuBarWidgetFontSize * 0.7, weight: .medium, design: .monospaced))
-                                        .foregroundStyle(metric.chartColor)
-                                }
+                            PointMark(
+                                x: .value("Start date", Double(point.id)),
+                                y: .value("Avg h/day", point.span.dailyAverageHours ?? 0)
+                            )
+                            .symbolSize(20)
+                            .foregroundStyle(averageColor)
+                            .annotation(position: .top, spacing: WinMuxSpacing.hairline) {
+                                Text("\(roundedAverage(for: point.span))")
+                                    .font(.system(size: menuBarWidgetFontSize * 0.7, weight: .medium, design: .monospaced))
+                                    .foregroundStyle(averageColor)
                             }
                         }
                     }
                     .chartXScale(domain: -0.5 ... Double(points.count) - 0.5)
-                    .chartYScale(domain: 0 ... 10)
+                    .chartYScale(domain: 0 ... chartMaximum)
                     .chartXAxis(.hidden)
                     .chartYAxis(.hidden)
                     .chartLegend(.hidden)
