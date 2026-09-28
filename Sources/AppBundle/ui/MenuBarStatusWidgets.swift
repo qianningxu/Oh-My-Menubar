@@ -726,7 +726,7 @@ private struct MenuBarFocusRunTrends: View {
         let spans = (MenuBarFocusRecord.spansInMonth(now: now) ?? []).filter { $0.run.focusHours != nil }
         let points = spans.enumerated().map { MenuBarFocusRunPlotPoint(id: $0.offset, span: $0.element) }
         let averageColor = workspaceSidebarWidgetSemanticColor(.gray, .color7)
-        let chartMaximum = max(1, ceil(spans.map { $0.dailyAverageHours ?? 0 }.max() ?? 0) + 1)
+        let chartMaximum = max(9, ceil(spans.map { $0.dailyAverageHours ?? 0 }.max() ?? 0) + 1)
         VStack(alignment: .leading, spacing: WinMuxSpacing.compact) {
             HStack(alignment: .top, spacing: WinMuxSpacing.regular) {
                 Text("Runs")
@@ -754,6 +754,15 @@ private struct MenuBarFocusRunTrends: View {
             } else {
                 VStack(spacing: WinMuxSpacing.none) {
                     Chart {
+                        RuleMark(y: .value("8-hour guide", 8))
+                            .foregroundStyle(workspaceSidebarWidgetSemanticColor(.gray, .color8))
+                            .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 4]))
+                            .annotation(position: .top, alignment: .trailing) {
+                                Text("8h")
+                                    .font(.system(size: menuBarWidgetFontSize * 0.7, weight: .medium, design: .monospaced))
+                                    .foregroundStyle(workspaceSidebarWidgetContent(.secondary))
+                            }
+
                         ForEach(points) { point in
                             LineMark(
                                 x: .value("Start date", Double(point.id)),
