@@ -241,7 +241,7 @@ private struct ProjectViewFilter {
     }
 }
 
-private struct TaskViewFilter {
+struct TaskViewFilter {
     let folders: [String]
 
     init?(baseContents: String) {
@@ -265,7 +265,7 @@ private struct TaskViewFilter {
     }
 }
 
-private struct ProjectFrontmatter {
+struct ProjectFrontmatter {
     private let properties: [String: [String]]
 
     init?(contents: String) {
@@ -304,6 +304,11 @@ private struct ProjectFrontmatter {
         properties[key] ?? []
     }
 
+    func values(matchingProperty key: String) -> [String] {
+        let normalizedKey = Self.normalizedPropertyName(key)
+        return properties.first(where: { Self.normalizedPropertyName($0.key) == normalizedKey })?.value ?? []
+    }
+
     func number(for key: String) -> Double? {
         values(for: key).first.flatMap(Double.init)
     }
@@ -326,6 +331,12 @@ private struct ProjectFrontmatter {
 
     private static func clean(_ value: String) -> String {
         value.trimmingCharacters(in: CharacterSet(charactersIn: "\"'"))
+    }
+
+    private static func normalizedPropertyName(_ value: String) -> String {
+        value.trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
+            .lowercased()
     }
 
     private static let dateFormatters: [DateFormatter] = [

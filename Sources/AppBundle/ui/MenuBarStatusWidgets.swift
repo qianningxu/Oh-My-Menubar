@@ -22,6 +22,7 @@ private let menuBarChartSize = CGSize(width: 360, height: 216)
 enum MenuBarStatusChartKind: Hashable, CaseIterable {
     case focusRuns
     case breakPot
+    case weeklyTasks
     case sleep
     case spending
 
@@ -29,6 +30,7 @@ enum MenuBarStatusChartKind: Hashable, CaseIterable {
         switch self {
             case .focusRuns: CGSize(width: 400, height: 444)
             case .breakPot: .zero
+            case .weeklyTasks: CGSize(width: 560, height: 560)
             case .sleep, .spending: menuBarChartSize
         }
     }
@@ -334,6 +336,8 @@ private struct MenuBarStatusWidgetGroup: View {
 
                         MenuBarDailyFocusCapsule(height: widgetHeight)
 
+                        MenuBarWeeklyTasksCapsule(height: widgetHeight)
+
                         MenuBarBreakPotWidget(height: widgetHeight)
 
                         MenuBarSleepSpendingCapsule(height: widgetHeight)
@@ -550,6 +554,7 @@ final class MenuBarChartHitRegionView: NSView {
         switch kind {
             case .focusRuns: setAccessibilityLabel("Show this month's focus calendar")
             case .breakPot: setAccessibilityLabel("Show focus record menu")
+            case .weeklyTasks: setAccessibilityLabel("Show this week's tasks")
             case .sleep: setAccessibilityLabel("Show sleep chart")
             case .spending: setAccessibilityLabel("Show spending chart")
         }
@@ -625,6 +630,8 @@ private struct MenuBarStatusChartView: View {
                     MenuBarFocusCalendar()
                 case .breakPot:
                     EmptyView()
+                case .weeklyTasks:
+                    MenuBarWeeklyTasksPopover()
                 case .sleep:
                     MenuBarSleepChart()
                 case .spending:
