@@ -21,7 +21,6 @@ private let menuBarChartSize = CGSize(width: 360, height: 216)
 
 enum MenuBarStatusChartKind: Hashable, CaseIterable {
     case focusRuns
-    case breakPot
     case weeklyTasks
     case sleep
     case spending
@@ -29,7 +28,6 @@ enum MenuBarStatusChartKind: Hashable, CaseIterable {
     var panelSize: CGSize {
         switch self {
             case .focusRuns: CGSize(width: 400, height: 444)
-            case .breakPot: .zero
             case .weeklyTasks: CGSize(width: 560, height: 560)
             case .sleep, .spending: menuBarChartSize
         }
@@ -145,11 +143,6 @@ public final class MenuBarStatusWidgetsController {
         anchorFrame: NSRect,
         screenNumber: NSNumber
     ) {
-        if kind == .breakPot {
-            chartPanel.closeChart()
-            MenuBarBreakPotMenu.shared.show(at: anchorFrame)
-            return
-        }
         chartPanel.toggle(
             kind: kind,
             anchorFrame: anchorFrame,
@@ -173,10 +166,6 @@ public final class MenuBarStatusWidgetsController {
             return
         }
         chartPanel.closeChart()
-    }
-
-    fileprivate func isBreakPotPoint(_ point: NSPoint) -> Bool {
-        chartFrames[.breakPot]?.values.contains(where: { $0.contains(point) }) == true
     }
 
     private func refresh() {
@@ -243,14 +232,9 @@ private final class MenuBarStatusWidgetPanel: NSPanelHud {
         switch event.type {
             case .leftMouseDown:
                 let point = convertToScreen(NSRect(origin: event.locationInWindow, size: .zero)).origin
-                if !MenuBarStatusWidgetsController.shared.isBreakPotPoint(point) {
-                    MenuBarStatusWidgetsController.shared.handleChartClick(at: point)
-                }
+                MenuBarStatusWidgetsController.shared.handleChartClick(at: point)
             case .leftMouseUp:
-                let point = convertToScreen(NSRect(origin: event.locationInWindow, size: .zero)).origin
-                if MenuBarStatusWidgetsController.shared.isBreakPotPoint(point) {
-                    MenuBarStatusWidgetsController.shared.handleChartClick(at: point)
-                }
+                break
             case .leftMouseDragged:
                 break
             default:
@@ -337,8 +321,6 @@ private struct MenuBarStatusWidgetGroup: View {
                         MenuBarDailyFocusCapsule(height: widgetHeight)
 
                         MenuBarWeeklyTasksCapsule(height: widgetHeight)
-
-                        MenuBarBreakPotWidget(height: widgetHeight)
 
                         MenuBarSleepSpendingCapsule(height: widgetHeight)
                     }
@@ -553,7 +535,6 @@ final class MenuBarChartHitRegionView: NSView {
     private func updateAccessibilityLabel() {
         switch kind {
             case .focusRuns: setAccessibilityLabel("Show this month's focus calendar")
-            case .breakPot: setAccessibilityLabel("Show focus record menu")
             case .weeklyTasks: setAccessibilityLabel("Show this week's tasks")
             case .sleep: setAccessibilityLabel("Show sleep chart")
             case .spending: setAccessibilityLabel("Show spending chart")
@@ -628,8 +609,6 @@ private struct MenuBarStatusChartView: View {
             switch kind {
                 case .focusRuns:
                     MenuBarFocusCalendar()
-                case .breakPot:
-                    EmptyView()
                 case .weeklyTasks:
                     MenuBarWeeklyTasksPopover()
                 case .sleep:
