@@ -814,7 +814,11 @@ private struct MenuBarFocusCalendarMonth: View {
     let now: Date
     let entries: [SidebarSelfDataTimeEntry]
 
-    private let calendar = Calendar.current
+    private let calendar: Calendar = {
+        var calendar = Calendar.current
+        calendar.firstWeekday = 2 // Monday
+        return calendar
+    }()
     private let columns = Array(
         repeating: GridItem(.flexible(), spacing: WinMuxSpacing.none),
         count: 7
