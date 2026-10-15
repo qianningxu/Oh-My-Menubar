@@ -18,21 +18,22 @@ final class MenuBarWeeklyTasksTest: XCTestCase {
                 - file.folder.containsAny("Others/Tasks")
         """.write(to: baseURL, atomically: true, encoding: .utf8)
 
-        func writeTask(_ title: String, planned: String?, completed: Bool, deadline: String? = nil) throws {
+        func writeTask(_ title: String, planned: String?, completed: Bool, deadline: String? = nil, project: String = "Study") throws {
             let plannedProperty = planned.map { "planed: \($0)\n" } ?? ""
             let deadlineProperty = deadline.map { "ddl: \($0)\n" } ?? ""
             try """
             ---
             \(plannedProperty)\(deadlineProperty)completed: \(completed)
-            project: "[[Study]]"
+            project: "[[\(project)]]"
             ---
             """.write(to: tasksURL.appendingPathComponent("\(title).md"), atomically: true, encoding: .utf8)
         }
 
-        try writeTask("Old unfinished", planned: "2025-01-01", completed: false)
-        try writeTask("Previous Sunday unfinished", planned: "2026-10-11", completed: false)
+        try writeTask("Old unfinished", planned: "2025-01-01", completed: false, project: "Older")
+        try writeTask("Previous Sunday unfinished", planned: "2026-10-11", completed: false, project: "Recent")
         try writeTask("Previous Sunday completed", planned: "2026-10-11", completed: true)
         try writeTask("Monday completed", planned: "2026-10-12", completed: true, deadline: "2026-10-30T17:00:00")
+        try writeTask("Monday unfinished", planned: "2026-10-12", completed: false, deadline: "2026-10-30T17:00:00")
         try writeTask("Sunday unfinished", planned: "2026-10-18", completed: false, deadline: "2026-10-25")
         try writeTask("Next Monday unfinished", planned: "2026-10-19", completed: false, deadline: "2026-10-11")
         try writeTask("Undated unfinished", planned: nil, completed: false)
@@ -47,11 +48,12 @@ final class MenuBarWeeklyTasksTest: XCTestCase {
         let snapshot = loader.load(now: now)
 
         XCTAssertEqual(snapshot.tasks.map(\.title), [
-            "Old unfinished", "Previous Sunday unfinished", "Monday completed", "Sunday unfinished",
+            "Old unfinished", "Previous Sunday unfinished", "Monday unfinished", "Sunday unfinished",
         ])
         XCTAssertEqual(snapshot.totalCount, 4)
-        XCTAssertEqual(snapshot.completedCount, 1)
-        let timedDeadlineTask = try XCTUnwrap(snapshot.tasks.first { $0.title == "Monday completed" })
+        XCTAssertEqual(snapshot.completedCount, 0)
+        XCTAssertEqual(snapshot.projects.map(\.name), ["Older", "Recent", "Study"])
+        let timedDeadlineTask = try XCTUnwrap(snapshot.tasks.first { $0.title == "Monday unfinished" })
         XCTAssertEqual(timedDeadlineTask.plannedDate, formatter.date(from: "2026-10-12"))
         XCTAssertEqual(timedDeadlineTask.deadline, Calendar.current.date(
             bySettingHour: 17, minute: 0, second: 0, of: try XCTUnwrap(formatter.date(from: "2026-10-30"))
@@ -62,12 +64,13 @@ final class MenuBarWeeklyTasksTest: XCTestCase {
         XCTAssertEqual(dateOnlyDeadlineTask.deadlineIncludesTime, false)
         XCTAssertEqual(snapshot.tasks.first?.deadline, nil)
 
-        try writeTask("Old unfinished", planned: "2025-01-01", completed: true)
+        try writeTask("Old unfinished", planned: "2025-01-01", completed: true, project: "Older")
         let refreshed = loader.load(now: now)
         XCTAssertEqual(refreshed.tasks.map(\.title), [
-            "Previous Sunday unfinished", "Monday completed", "Sunday unfinished",
+            "Previous Sunday unfinished", "Monday unfinished", "Sunday unfinished",
         ])
         XCTAssertEqual(refreshed.totalCount, 3)
-        XCTAssertEqual(refreshed.completedCount, 1)
+        XCTAssertEqual(refreshed.completedCount, 0)
+        XCTAssertEqual(refreshed.projects.map(\.name), ["Recent", "Study"])
     }
 }

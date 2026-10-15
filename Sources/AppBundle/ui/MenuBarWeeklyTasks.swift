@@ -35,7 +35,12 @@ struct MenuBarWeeklyTasksSnapshot: Equatable {
     var projects: [MenuBarWeeklyTaskProject] {
         Dictionary(grouping: tasks, by: \.projectName)
             .map { MenuBarWeeklyTaskProject(name: $0.key, tasks: $0.value) }
-            .sorted { $0.name.localizedStandardCompare($1.name) == .orderedDescending }
+            .sorted {
+                let firstDate = $0.tasks.map(\.plannedDate).min() ?? .distantFuture
+                let secondDate = $1.tasks.map(\.plannedDate).min() ?? .distantFuture
+                if firstDate != secondDate { return firstDate < secondDate }
+                return $0.name.localizedStandardCompare($1.name) == .orderedDescending
+            }
     }
 }
 
@@ -76,9 +81,7 @@ struct MenuBarWeeklyTasksLoader {
 
                 let plannedDay = calendar.startOfDay(for: plannedDate)
                 let isCompleted = frontmatter.bool(for: "completed")
-                guard plannedDay < week.end,
-                      plannedDay >= week.start || !isCompleted
-                else { continue }
+                guard !isCompleted, plannedDay < week.end else { continue }
 
                 let projectName = frontmatter.values(for: "project").first.map(frontmatter.linkDisplayName) ?? "Unassigned"
                 tasks.append(
@@ -291,14 +294,14 @@ struct MenuBarWeeklyTasksCapsule: View {
                 .font(.system(size: menuBarWidgetIconSize, weight: menuBarWidgetFontWeight))
                 .frame(width: menuBarWidgetIconFrame, height: menuBarWidgetIconFrame)
                 .foregroundStyle(menuBarWidgetIcon)
-            Text("Tasks - \(model.snapshot.completedCount)/\(model.snapshot.totalCount)")
+            Text("Tasks - \(model.snapshot.totalCount) left")
                 .font(.system(size: menuBarWidgetFontSize, weight: menuBarWidgetFontWeight))
                 .monospacedDigit()
         }
         .menuBarWidgetItem(height: height, chartKind: .weeklyTasks)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(
-            Text("This week and overdue: \(model.snapshot.completedCount) of \(model.snapshot.totalCount) tasks completed")
+            Text("This week and overdue: \(model.snapshot.totalCount) tasks left")
         )
         .background(MenuBarChartHitRegion(kind: .weeklyTasks))
         .task { await model.refreshContinuously() }
@@ -327,7 +330,7 @@ struct MenuBarWeeklyTasksPopover: View {
                 }
 
                 if model.snapshot.tasks.isEmpty {
-                    Text("No tasks planned this week or unfinished tasks from earlier weeks.")
+                    Text("No unfinished tasks planned this week or earlier.")
                         .font(.system(size: menuBarWidgetFontSize))
                         .foregroundStyle(workspaceSidebarWidgetContent(.secondary))
                         .fixedSize(horizontal: false, vertical: true)
@@ -381,7 +384,7 @@ private struct MenuBarWeeklyTaskProjectSection: View {
                     .font(.system(size: menuBarWidgetFontSize, weight: .semibold))
                     .foregroundStyle(workspaceSidebarWidgetContent(.primary))
                 Spacer(minLength: WinMuxSpacing.compact)
-                Text("\(project.completedCount)/\(project.tasks.count)")
+                Text("\(project.tasks.count) left")
                     .font(.system(size: menuBarWidgetFontSize * 0.8, weight: .medium, design: .monospaced))
                     .foregroundStyle(workspaceSidebarWidgetContent(.secondary))
             }
