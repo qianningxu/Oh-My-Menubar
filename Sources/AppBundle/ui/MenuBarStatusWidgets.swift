@@ -318,9 +318,9 @@ private struct MenuBarStatusWidgetGroup: View {
                             )
                         }
 
-                        MenuBarDailyFocusCapsule(height: widgetHeight)
-
                         MenuBarWeeklyTasksCapsule(height: widgetHeight)
+
+                        MenuBarDailyFocusCapsule(height: widgetHeight)
                     }
                 }
                 .frame(
