@@ -429,9 +429,13 @@ private struct MenuBarWeeklyTaskRow: View {
             TimelineView(.periodic(from: .now, by: 60)) { context in
                 let isPast = Calendar.current.startOfDay(for: task.plannedDate)
                     < Calendar.current.startOfDay(for: context.date)
-                let plannedText = task.plannedDate.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day())
-                VStack(alignment: .trailing, spacing: WinMuxSpacing.hairline) {
-                    Text(task.deadline == nil ? plannedText : "Start \(plannedText)")
+                let rangeFormat: Date.FormatStyle = .dateTime.day().month(.abbreviated)
+                    .locale(Locale(identifier: "en_GB"))
+                let plannedText = task.deadline == nil
+                    ? task.plannedDate.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day())
+                    : task.plannedDate.formatted(rangeFormat)
+                HStack(spacing: WinMuxSpacing.none) {
+                    Text(plannedText)
                         .foregroundStyle(
                             isPast
                                 ? workspaceSidebarWidgetSemanticColor(.red, .color9)
@@ -441,15 +445,15 @@ private struct MenuBarWeeklyTaskRow: View {
                         let deadlineIsPast = task.deadlineIncludesTime
                             ? deadline < context.date
                             : Calendar.current.startOfDay(for: deadline) < Calendar.current.startOfDay(for: context.date)
-                        let format: Date.FormatStyle = task.deadlineIncludesTime
-                            ? .dateTime.month(.abbreviated).day().hour().minute()
-                            : .dateTime.month(.abbreviated).day()
-                        Text("Due \(deadline.formatted(format))")
+                        Text(" - ")
+                            .foregroundStyle(workspaceSidebarWidgetContent(.secondary))
+                        Text(deadline.formatted(rangeFormat))
                             .foregroundStyle(
                                 deadlineIsPast
                                     ? workspaceSidebarWidgetSemanticColor(.red, .color9)
                                     : workspaceSidebarWidgetContent(.secondary)
                             )
+                            .help("Deadline: \(deadline.formatted(date: .abbreviated, time: task.deadlineIncludesTime ? .shortened : .omitted))")
                     }
                 }
                 .font(.system(size: menuBarWidgetFontSize * 0.7, weight: .regular, design: .monospaced))
