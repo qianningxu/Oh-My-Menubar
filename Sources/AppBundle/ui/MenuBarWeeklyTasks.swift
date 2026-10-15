@@ -73,7 +73,10 @@ struct MenuBarWeeklyTasksLoader {
                 else { continue }
 
                 let plannedDay = calendar.startOfDay(for: plannedDate)
-                guard plannedDay >= week.start, plannedDay < week.end else { continue }
+                let isCompleted = frontmatter.bool(for: "completed")
+                guard plannedDay < week.end,
+                      plannedDay >= week.start || !isCompleted
+                else { continue }
 
                 let projectName = frontmatter.values(for: "project").first.map(frontmatter.linkDisplayName) ?? "Unassigned"
                 tasks.append(
@@ -83,7 +86,7 @@ struct MenuBarWeeklyTasksLoader {
                         projectName: projectName,
                         plannedDate: plannedDate,
                         estimatedHours: frontmatter.values(matchingProperty: "Estimated").first.flatMap(Double.init),
-                        isCompleted: frontmatter.bool(for: "completed")
+                        isCompleted: isCompleted
                     )
                 )
             }
@@ -291,7 +294,7 @@ struct MenuBarWeeklyTasksCapsule: View {
         .menuBarWidgetItem(height: height, chartKind: .weeklyTasks)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(
-            Text("This week: \(model.snapshot.completedCount) of \(model.snapshot.totalCount) tasks completed")
+            Text("This week and overdue: \(model.snapshot.completedCount) of \(model.snapshot.totalCount) tasks completed")
         )
         .background(MenuBarChartHitRegion(kind: .weeklyTasks))
         .task { await model.refreshContinuously() }
@@ -315,7 +318,7 @@ struct MenuBarWeeklyTasksPopover: View {
             }
 
             if model.snapshot.tasks.isEmpty {
-                Text("No tasks planned this week.")
+                Text("No tasks planned this week or unfinished tasks from earlier weeks.")
                     .font(.system(size: menuBarWidgetFontSize))
                     .foregroundStyle(workspaceSidebarWidgetContent(.secondary))
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
