@@ -28,7 +28,7 @@ enum MenuBarStatusChartKind: Hashable, CaseIterable {
     var panelSize: CGSize {
         switch self {
             case .focusRuns: CGSize(width: 400, height: 444)
-            case .weeklyTasks: CGSize(width: 560, height: 560)
+            case .weeklyTasks: CGSize(width: 400, height: WinMuxSpacing.page * 2)
             case .sleep, .spending: menuBarChartSize
         }
     }
@@ -533,7 +533,7 @@ final class MenuBarChartHitRegionView: NSView {
     private func updateAccessibilityLabel() {
         switch kind {
             case .focusRuns: setAccessibilityLabel("Show this month's focus calendar")
-            case .weeklyTasks: setAccessibilityLabel("Show this week's tasks")
+            case .weeklyTasks: setAccessibilityLabel("Show this week's and overdue tasks")
             case .sleep: setAccessibilityLabel("Show sleep chart")
             case .spending: setAccessibilityLabel("Show spending chart")
         }
@@ -546,6 +546,8 @@ fileprivate final class MenuBarStatusChartPanel: NSPanelHud, ObservableObject {
         rootView: MenuBarStatusChartView(kind: .sleep, projectThemeFamily: nil)
     )
     @Published private(set) var presentedKind: MenuBarStatusChartKind?
+    private var chartAnchorFrame: NSRect = .zero
+    private var chartVisibleFrame: NSRect = .zero
 
     override init() {
         super.init()
@@ -570,15 +572,33 @@ fileprivate final class MenuBarStatusChartPanel: NSPanelHud, ObservableObject {
         }
 
         presentedKind = kind
-        hostingView.rootView = MenuBarStatusChartView(
-            kind: kind,
-            projectThemeFamily: projectThemeFamily
-        )
-
-        let panelSize = kind.panelSize
-        let visibleFrame = NSScreen.screens.first(where: { $0.frame.contains(anchorFrame.center) })?.visibleFrame
+        chartAnchorFrame = anchorFrame
+        chartVisibleFrame = NSScreen.screens.first(where: { $0.frame.contains(anchorFrame.center) })?.visibleFrame
             ?? NSScreen.screens.first?.visibleFrame
             ?? .zero
+        let availableHeight = max(
+            WinMuxSpacing.page,
+            anchorFrame.minY - chartVisibleFrame.minY - workspaceSidebarStandardGap * 2
+        )
+        hostingView.rootView = MenuBarStatusChartView(
+            kind: kind,
+            projectThemeFamily: projectThemeFamily,
+            maximumTaskHeight: max(WinMuxSpacing.page, availableHeight - WinMuxSpacing.panel * 2),
+            onTaskHeightChange: { [weak self] height in
+                Task { @MainActor in
+                    guard let self, self.presentedKind == .weeklyTasks else { return }
+                    self.setPanelSize(CGSize(width: kind.panelSize.width, height: height + WinMuxSpacing.panel * 2))
+                }
+            }
+        )
+
+        setPanelSize(kind.panelSize)
+        orderFrontRegardless()
+    }
+
+    private func setPanelSize(_ panelSize: CGSize) {
+        let anchorFrame = chartAnchorFrame
+        let visibleFrame = chartVisibleFrame
         let x = min(
             max(anchorFrame.midX - panelSize.width / 2, visibleFrame.minX + workspaceSidebarStandardGap),
             visibleFrame.maxX - panelSize.width - workspaceSidebarStandardGap
@@ -589,7 +609,6 @@ fileprivate final class MenuBarStatusChartPanel: NSPanelHud, ObservableObject {
             display: true,
             animate: false
         )
-        orderFrontRegardless()
     }
 
     func closeChart() {
@@ -601,6 +620,9 @@ fileprivate final class MenuBarStatusChartPanel: NSPanelHud, ObservableObject {
 private struct MenuBarStatusChartView: View {
     let kind: MenuBarStatusChartKind
     let projectThemeFamily: WorkspaceSidebarProjectThemeFamily?
+    var maximumTaskHeight: CGFloat = WinMuxSpacing.page
+    var onTaskHeightChange: (CGFloat) -> Void = { _ in }
+    private let taskPresentationID = UUID()
 
     var body: some View {
         Group {
@@ -608,15 +630,19 @@ private struct MenuBarStatusChartView: View {
                 case .focusRuns:
                     MenuBarFocusCalendar()
                 case .weeklyTasks:
-                    MenuBarWeeklyTasksPopover()
+                    MenuBarWeeklyTasksPopover(
+                        maximumHeight: maximumTaskHeight,
+                        onHeightChange: onTaskHeightChange
+                    )
+                    .id(taskPresentationID)
                 case .sleep:
                     MenuBarSleepChart()
                 case .spending:
                     MenuBarSpendingChart()
             }
         }
-        .padding(kind == .focusRuns ? WinMuxSpacing.panel : standardGap * 7)
-        .frame(width: kind.panelSize.width, height: kind.panelSize.height)
+        .padding(kind == .focusRuns || kind == .weeklyTasks ? WinMuxSpacing.panel : standardGap * 7)
+        .frame(width: kind.panelSize.width, height: kind == .weeklyTasks ? nil : kind.panelSize.height)
         .background {
             WorkspaceSidebarStatusCardBackground()
         }

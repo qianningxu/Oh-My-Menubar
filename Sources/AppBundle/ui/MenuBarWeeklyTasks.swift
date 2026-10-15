@@ -8,6 +8,8 @@ struct MenuBarWeeklyTask: Identifiable, Equatable {
     let title: String
     let projectName: String
     let plannedDate: Date
+    let deadline: Date?
+    let deadlineIncludesTime: Bool
     let estimatedHours: Double?
     let isCompleted: Bool
 
@@ -85,6 +87,8 @@ struct MenuBarWeeklyTasksLoader {
                         title: taskURL.deletingPathExtension().lastPathComponent,
                         projectName: projectName,
                         plannedDate: plannedDate,
+                        deadline: frontmatter.date(for: "ddl"),
+                        deadlineIncludesTime: frontmatter.values(for: "ddl").first?.contains(":") == true,
                         estimatedHours: frontmatter.values(matchingProperty: "Estimated").first.flatMap(Double.init),
                         isCompleted: isCompleted
                     )
@@ -302,29 +306,34 @@ struct MenuBarWeeklyTasksCapsule: View {
 }
 
 struct MenuBarWeeklyTasksPopover: View {
+    let maximumHeight: CGFloat
+    let onHeightChange: (CGFloat) -> Void
+
     @StateObject private var model = MenuBarWeeklyTasksModel.shared
+    @State private var contentHeight: CGFloat = WinMuxSpacing.page
 
     var body: some View {
-        VStack(alignment: .leading, spacing: WinMuxSpacing.regular) {
-            if let feedback = model.feedback {
-                Text(feedback.message)
-                    .font(.system(size: menuBarWidgetFontSize * 0.8))
-                    .foregroundStyle(
-                        feedback.isError
-                            ? workspaceSidebarWidgetSemanticColor(.red, .color9)
-                            : workspaceSidebarWidgetContent(.secondary)
-                    )
-                    .fixedSize(horizontal: false, vertical: true)
-            }
+        ScrollView {
+            VStack(alignment: .leading, spacing: WinMuxSpacing.regular) {
+                if let feedback = model.feedback {
+                    Text(feedback.message)
+                        .font(.system(size: menuBarWidgetFontSize * 0.8))
+                        .foregroundStyle(
+                            feedback.isError
+                                ? workspaceSidebarWidgetSemanticColor(.red, .color9)
+                                : workspaceSidebarWidgetContent(.secondary)
+                        )
+                        .fixedSize(horizontal: false, vertical: true)
+                }
 
-            if model.snapshot.tasks.isEmpty {
-                Text("No tasks planned this week or unfinished tasks from earlier weeks.")
-                    .font(.system(size: menuBarWidgetFontSize))
-                    .foregroundStyle(workspaceSidebarWidgetContent(.secondary))
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-            } else {
-                ScrollView {
-                    LazyVStack(alignment: .leading, spacing: WinMuxSpacing.section) {
+                if model.snapshot.tasks.isEmpty {
+                    Text("No tasks planned this week or unfinished tasks from earlier weeks.")
+                        .font(.system(size: menuBarWidgetFontSize))
+                        .foregroundStyle(workspaceSidebarWidgetContent(.secondary))
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity, alignment: .topLeading)
+                } else {
+                    VStack(alignment: .leading, spacing: WinMuxSpacing.section) {
                         ForEach(model.snapshot.projects) { project in
                             MenuBarWeeklyTaskProjectSection(project: project, model: model)
                         }
@@ -332,8 +341,32 @@ struct MenuBarWeeklyTasksPopover: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background {
+                GeometryReader { geometry in
+                    WinMuxDesignTokens.transparent.preference(
+                        key: MenuBarWeeklyTasksContentHeight.self,
+                        value: geometry.size.height
+                    )
+                }
+            }
+        }
+        .frame(height: min(contentHeight, maximumHeight))
+        .onPreferenceChange(MenuBarWeeklyTasksContentHeight.self) { height in
+            let fittedHeight = min(ceil(height), maximumHeight)
+            guard fittedHeight > 0 else { return }
+            contentHeight = fittedHeight
+            onHeightChange(fittedHeight)
         }
         .task { await model.refreshContinuously() }
+    }
+}
+
+private struct MenuBarWeeklyTasksContentHeight: PreferenceKey {
+    static let defaultValue: CGFloat = 0
+
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = max(value, nextValue())
     }
 }
 
@@ -383,22 +416,42 @@ private struct MenuBarWeeklyTaskRow: View {
             .help(task.isCompleted ? "Mark incomplete" : "Mark complete")
             .accessibilityLabel(task.isCompleted ? "Mark \(task.title) incomplete" : "Mark \(task.title) complete")
 
-            VStack(alignment: .leading, spacing: WinMuxSpacing.hairline) {
-                Text(task.title)
-                    .font(.system(size: menuBarWidgetFontSize * 0.85))
-                    .foregroundStyle(workspaceSidebarWidgetContent(task.isCompleted ? .secondary : .primary))
-                    .strikethrough(task.isCompleted)
-                    .fixedSize(horizontal: false, vertical: true)
+            Text(task.title)
+                .font(.system(size: menuBarWidgetFontSize * 0.85))
+                .foregroundStyle(workspaceSidebarWidgetContent(task.isCompleted ? .secondary : .primary))
+                .strikethrough(task.isCompleted)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
 
-                Text("Estimated: \(task.estimatedHours.map { "\($0.formatted(.number.precision(.fractionLength(0...2))))h" } ?? "—")")
-                    .font(.system(size: menuBarWidgetFontSize * 0.7))
-                    .foregroundStyle(workspaceSidebarWidgetContent(.secondary))
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-
-            Text(task.plannedDate.formatted(.dateTime.weekday(.abbreviated).day()))
+            TimelineView(.periodic(from: .now, by: 60)) { context in
+                let isPast = Calendar.current.startOfDay(for: task.plannedDate)
+                    < Calendar.current.startOfDay(for: context.date)
+                let plannedText = task.plannedDate.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day())
+                VStack(alignment: .trailing, spacing: WinMuxSpacing.hairline) {
+                    Text(task.deadline == nil ? plannedText : "Start \(plannedText)")
+                        .foregroundStyle(
+                            isPast
+                                ? workspaceSidebarWidgetSemanticColor(.red, .color9)
+                                : workspaceSidebarWidgetContent(.secondary)
+                        )
+                    if let deadline = task.deadline {
+                        let deadlineIsPast = task.deadlineIncludesTime
+                            ? deadline < context.date
+                            : Calendar.current.startOfDay(for: deadline) < Calendar.current.startOfDay(for: context.date)
+                        let format: Date.FormatStyle = task.deadlineIncludesTime
+                            ? .dateTime.month(.abbreviated).day().hour().minute()
+                            : .dateTime.month(.abbreviated).day()
+                        Text("Due \(deadline.formatted(format))")
+                            .foregroundStyle(
+                                deadlineIsPast
+                                    ? workspaceSidebarWidgetSemanticColor(.red, .color9)
+                                    : workspaceSidebarWidgetContent(.secondary)
+                            )
+                    }
+                }
                 .font(.system(size: menuBarWidgetFontSize * 0.7, weight: .regular, design: .monospaced))
-                .foregroundStyle(workspaceSidebarWidgetContent(.secondary))
+                .fixedSize()
+            }
 
             Button {
                 Task { await model.startTracking(task) }
