@@ -34,12 +34,12 @@ struct MenuBarAcademicPeriod {
     }
 
     var title: String {
-        let progress = "Y4S1 - \(weekday) - \(currentWeek)/\(totalWeeks)W - \(elapsedDays)/\(totalDays)d"
+        let progress = "Semester 1, Week \(currentWeek), Day \(elapsedDays)/\(totalDays)"
         return specialWeek.map { "\(progress) - \($0)" } ?? progress
     }
 
     var accessibilityLabel: String {
-        let progress = "Y4S1, \(weekday), week \(currentWeek) of \(totalWeeks), \(elapsedDays) of \(totalDays) days elapsed"
+        let progress = "Semester 1, Week \(currentWeek), Day \(elapsedDays) of \(totalDays)"
         return specialWeek.map { "\(progress), \($0)" } ?? progress
     }
 }
