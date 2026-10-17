@@ -380,6 +380,7 @@ struct MenuBarPeriodCapsule: View {
                     .foregroundStyle(menuBarWidgetIcon)
                 Text(period.title)
                     .font(.system(size: menuBarWidgetFontSize, weight: menuBarWidgetFontWeight))
+                    .bold()
                     .monospacedDigit()
 
             }
