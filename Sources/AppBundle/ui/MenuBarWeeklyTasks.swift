@@ -32,6 +32,13 @@ struct MenuBarWeeklyTasksSnapshot: Equatable {
     var completedCount: Int { tasks.filter(\.isCompleted).count }
     var totalCount: Int { tasks.count }
 
+    var currentWeekTasks: [MenuBarWeeklyTask] {
+        let week = weekStart ..< weekEnd
+        return tasks.filter { task in
+            task.plannedDate.map(week.contains) == true || task.deadline.map(week.contains) == true
+        }
+    }
+
     var projects: [MenuBarWeeklyTaskProject] {
         Dictionary(grouping: tasks, by: \.projectName)
             .map { MenuBarWeeklyTaskProject(name: $0.key, tasks: $0.value) }
@@ -123,10 +130,7 @@ final class MenuBarWeeklyTasksModel: ObservableObject {
     func trackedTime(forProject name: String) -> String {
         guard let trackedSeconds else { return "—" }
         let seconds = trackedSeconds[name] ?? 0
-        if seconds < 60 && seconds > 0 { return "\(seconds)s" }
-        let minutes = seconds / 60
-        if minutes < 60 { return "\(minutes)m" }
-        return "\(minutes / 60)h \(minutes % 60)m"
+        return "\(Int((Double(seconds) / 3600).rounded()))h"
     }
 
     private func refreshTrackedTime() async {
@@ -317,14 +321,14 @@ struct MenuBarWeeklyTasksCapsule: View {
                 .font(.system(size: menuBarWidgetIconSize, weight: menuBarWidgetFontWeight))
                 .frame(width: menuBarWidgetIconFrame, height: menuBarWidgetIconFrame)
                 .foregroundStyle(menuBarWidgetIcon)
-            Text("Tasks")
+            Text("Tasks - \(model.snapshot.currentWeekTasks.count) left this week")
                 .font(.system(size: menuBarWidgetFontSize, weight: menuBarWidgetFontWeight))
                 .monospacedDigit()
         }
         .menuBarWidgetItem(height: height, chartKind: .weeklyTasks)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(
-            Text("Show unfinished tasks")
+            Text("\(model.snapshot.currentWeekTasks.count) tasks left this week")
         )
         .background(MenuBarChartHitRegion(kind: .weeklyTasks))
         .contextMenu { TaskViewOptions() }
@@ -357,7 +361,7 @@ struct MenuBarWeeklyTasksPopover: View {
         func dates(_ task: MenuBarWeeklyTask) -> [Date] {
             [task.plannedDate, task.deadline].compactMap { $0 }
         }
-        let visible = snapshot.tasks.filter { !thisWeek || dates($0).contains(where: week.contains) }
+        let visible = thisWeek ? snapshot.currentWeekTasks : snapshot.tasks
         if !byWeek {
             return MenuBarWeeklyTasksSnapshot(weekStart: week.lowerBound, weekEnd: week.upperBound, tasks: visible).projects
         }

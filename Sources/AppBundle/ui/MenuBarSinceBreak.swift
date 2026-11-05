@@ -17,17 +17,14 @@ private func durationText(_ seconds: Int) -> String {
 }
 
 private struct BreakSnapshot {
-    let lastBreak: Date?
-    let entries: [MenuBarBreakEntry]?
     var daily: [(day: Date, seconds: Int)] = []
     var today: Int? = nil
-    var total: String { entries.map { durationText($0.reduce(0) { $0 + $1.seconds }) } ?? "—" }
 }
 
 @MainActor
 private final class SinceBreakModel: ObservableObject {
     static let shared = SinceBreakModel()
-    @Published var snapshot = BreakSnapshot(lastBreak: nil, entries: nil)
+    @Published var snapshot = BreakSnapshot()
 
     func refresh(overrides: String) async {
         let updated = await Task.detached(priority: .utility) {
@@ -39,7 +36,7 @@ private final class SinceBreakModel: ObservableObject {
             let firstDay = day.map { MenuBarFocusRecord.nextDay(after: $0, calendar: calendar) }
             guard let database = SidebarSelfDataStore.sqliteURL(for: root),
                   let entries = SidebarSelfDataStore.focusEntries(since: min(firstDay ?? today, today), through: now, from: database)
-            else { return BreakSnapshot(lastBreak: day, entries: nil) }
+            else { return BreakSnapshot() }
             func seconds(on day: Date) -> Int {
                 let end = MenuBarFocusRecord.nextDay(after: day, calendar: calendar)
                 return entries.reduce(0) { sum, entry in
@@ -54,8 +51,7 @@ private final class SinceBreakModel: ObservableObject {
                     cursor = MenuBarFocusRecord.nextDay(after: cursor, calendar: calendar)
                 }
             }
-            return BreakSnapshot(lastBreak: day, entries: firstDay.map { start in entries.filter { $0.start >= start } },
-                                 daily: days, today: seconds(on: today))
+            return BreakSnapshot(daily: days, today: seconds(on: today))
         }.value
         if !Task.isCancelled { snapshot = updated }
     }
@@ -68,13 +64,15 @@ struct MenuBarSinceBreakView: View {
 
     var body: some View {
         HStack(spacing: WinMuxSpacing.compact) {
-            ForEach(model.snapshot.daily, id: \.day) { day in
-                Circle()
-                    .fill(workspaceSidebarWidgetSemanticColor(MenuBarFocusCalendarBand.forHours(Double(day.seconds) / 3600).family, .color9))
-                    .frame(width: WinMuxSpacing.regular, height: WinMuxSpacing.regular)
+            Text("Today  \(model.snapshot.today.map(durationText) ?? "—")")
+            HStack(alignment: .bottom, spacing: WinMuxSpacing.hairline) {
+                ForEach(model.snapshot.daily, id: \.day) { day in
+                Capsule()
+                    .fill(workspaceSidebarWidgetSemanticColor(MenuBarFocusCalendarBand.forHours(Double(day.seconds) / 3600).family, .color7))
+                    .frame(width: WinMuxSpacing.compact, height: max(WinMuxSpacing.hairline, min(1, CGFloat(day.seconds) / 36000) * WinMuxSpacing.panel))
                     .help("\(day.day.formatted(date: .abbreviated, time: .omitted)): \(durationText(day.seconds))")
             }
-            Text("Today - \(model.snapshot.today.map(durationText) ?? "—")")
+            }
         }
             .font(.system(size: menuBarWidgetFontSize, weight: menuBarWidgetFontWeight))
             .monospacedDigit()
@@ -86,51 +84,5 @@ struct MenuBarSinceBreakView: View {
                     do { try await Task.sleep(for: .seconds(30)) } catch { return }
                 }
             }
-    }
-}
-
-struct MenuBarSinceBreakPopover: View {
-    @ObservedObject private var model = SinceBreakModel.shared
-    @State private var calendarVisible = false
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: WinMuxSpacing.regular) {
-            Picker("Focus view", selection: $calendarVisible) {
-                Text("Entries").tag(false)
-                Text("Calendar").tag(true)
-            }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            if calendarVisible {
-                ScrollView { MenuBarFocusCalendar() }
-            } else if let day = model.snapshot.lastBreak, let entries = model.snapshot.entries {
-                HStack {
-                    Text("After \(day.formatted(date: .abbreviated, time: .omitted))")
-                    Spacer()
-                    Text(model.snapshot.total).bold()
-                }
-                if entries.isEmpty { Text("No entries since this break.") }
-                ScrollView {
-                    LazyVStack(alignment: .leading, spacing: WinMuxSpacing.regular) {
-                        ForEach(entries) { entry in
-                            HStack(alignment: .top) {
-                                VStack(alignment: .leading) {
-                                    Text(entry.title.flatMap { $0.isEmpty ? nil : $0 } ?? entry.project ?? "Untitled entry")
-                                    let when = entry.start.formatted(.dateTime.day().month(.abbreviated).hour().minute())
-                                    Text([when, entry.title?.isEmpty == false ? entry.project : nil].compactMap { $0 }.joined(separator: " · "))
-                                        .foregroundStyle(workspaceSidebarWidgetContent(.secondary))
-                                }
-                                Spacer()
-                                Text(durationText(entry.seconds)).monospacedDigit()
-                            }
-                        }
-                    }
-                }
-            } else {
-                Text(model.snapshot.lastBreak == nil ? "No break day recorded." : "Time entries unavailable.")
-            }
-            Spacer(minLength: 0)
-        }
-        .font(.system(size: menuBarWidgetFontSize))
     }
 }

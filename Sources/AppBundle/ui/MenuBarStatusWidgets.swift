@@ -512,7 +512,7 @@ final class MenuBarChartHitRegionView: NSView {
 
     private func updateAccessibilityLabel() {
         switch kind {
-            case .focusRuns: setAccessibilityLabel("Show focus entries since the last break")
+            case .focusRuns: setAccessibilityLabel("Show focus calendar")
             case .weeklyTasks: setAccessibilityLabel("Show unfinished tasks")
             case .sleep: setAccessibilityLabel("Show sleep chart")
             case .spending: setAccessibilityLabel("Show spending chart")
@@ -608,7 +608,7 @@ private struct MenuBarStatusChartView: View {
         Group {
             switch kind {
                 case .focusRuns:
-                    MenuBarSinceBreakPopover().id(taskPresentationID)
+                    MenuBarFocusCalendar()
                 case .weeklyTasks:
                     MenuBarWeeklyTasksPopover(
                         maximumHeight: maximumTaskHeight,
