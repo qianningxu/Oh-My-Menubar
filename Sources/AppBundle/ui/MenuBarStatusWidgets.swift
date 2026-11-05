@@ -1192,7 +1192,7 @@ private struct MenuBarWidgetItemModifier: ViewModifier {
             .winMuxBarSegment(palette, isSelected: isSelected, isHovered: isHovered)
             .clipShape(RoundedRectangle(cornerRadius: WinMuxBarStyle.topBarCornerRadius, style: .continuous))
             .overlay {
-                if isSelected {
+                if isSelected && chartKind != .focusRuns {
                     RoundedRectangle(cornerRadius: WinMuxBarStyle.topBarCornerRadius, style: .continuous)
                         .strokeBorder(winMuxBarSurfaceStroke(palette), lineWidth: WinMuxBarStyle.strokeWidth)
                         .allowsHitTesting(false)
