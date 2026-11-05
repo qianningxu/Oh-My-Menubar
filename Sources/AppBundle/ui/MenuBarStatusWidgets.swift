@@ -381,17 +381,8 @@ struct MenuBarPeriodCapsule: View {
 
 struct MenuBarDailyFocusCapsule: View {
     let height: CGFloat
-    @StateObject private var loader = WorkspaceSidebarTodayFocusLoader()
-
     var body: some View {
-        TimelineView(.periodic(from: .now, by: 60)) { context in
-            MenuBarFocusProgressContent(snapshot: loader.snapshot, now: context.date, height: height)
-        }
-        .task {
-            await loader.refreshContinuously(
-                dataSource: URL(filePath: menuBarWidgetDataPath, directoryHint: .isDirectory)
-            )
-        }
+        MenuBarSinceBreakView(height: height)
     }
 }
 
@@ -521,7 +512,7 @@ final class MenuBarChartHitRegionView: NSView {
 
     private func updateAccessibilityLabel() {
         switch kind {
-            case .focusRuns: setAccessibilityLabel("Show this month's focus calendar")
+            case .focusRuns: setAccessibilityLabel("Show focus entries since the last break")
             case .weeklyTasks: setAccessibilityLabel("Show unfinished tasks")
             case .sleep: setAccessibilityLabel("Show sleep chart")
             case .spending: setAccessibilityLabel("Show spending chart")
@@ -617,7 +608,7 @@ private struct MenuBarStatusChartView: View {
         Group {
             switch kind {
                 case .focusRuns:
-                    MenuBarFocusCalendar()
+                    MenuBarSinceBreakPopover().id(taskPresentationID)
                 case .weeklyTasks:
                     MenuBarWeeklyTasksPopover(
                         maximumHeight: maximumTaskHeight,
@@ -660,7 +651,7 @@ private final class MenuBarFocusCalendarModel: ObservableObject {
     }
 }
 
-private struct MenuBarFocusCalendar: View {
+struct MenuBarFocusCalendar: View {
     @StateObject private var model = MenuBarFocusCalendarModel()
 
     var body: some View {
@@ -802,7 +793,7 @@ private func menuBarRoundedFocusHours(_ hours: Double) -> Int {
     max(0, Int(hours.rounded(.toNearestOrAwayFromZero)))
 }
 
-private enum MenuBarFocusCalendarBand: Int, CaseIterable {
+enum MenuBarFocusCalendarBand: Int, CaseIterable {
     case green
     case yellow
     case red

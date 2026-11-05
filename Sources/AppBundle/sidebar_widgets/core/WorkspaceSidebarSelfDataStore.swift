@@ -80,11 +80,40 @@ enum SidebarSelfDataStore {
         }
     }
 
+    static func focusEntries(since start: Date, through now: Date, from url: URL) -> [MenuBarBreakEntry]? {
+        // Use epoch seconds to clip entries that span midnight at the break boundary.
+        let lower = Int(start.timeIntervalSince1970)
+        let upper = Int(now.timeIntervalSince1970)
+        let sql = """
+            WITH spans AS (
+                SELECT id, project_name, description, unixepoch(start_at_utc) AS begin,
+                       CASE WHEN is_running = 1 AND id = (
+                           SELECT id FROM time_entries WHERE source_kind = 'toggl' ORDER BY start_at_utc DESC LIMIT 1
+                       ) THEN \(upper)
+                       ELSE COALESCE(unixepoch(stop_at_utc), unixepoch(start_at_utc) + duration_seconds) END AS finish
+                FROM time_entries
+                WHERE source_kind = 'toggl' AND lower(trim(coalesce(project_name, ''))) != 'break'
+            )
+            SELECT id, project_name, description, max(begin, \(lower)), min(finish, \(upper))
+            FROM spans WHERE min(finish, \(upper)) > max(begin, \(lower))
+            ORDER BY begin DESC, id DESC
+            """
+        return withDatabase(url) { database in
+            query(database, sql: sql) { row in
+                MenuBarBreakEntry(id: sqlite3_column_int64(row, 0), project: textColumn(row, 1),
+                                  title: textColumn(row, 2), start: Date(timeIntervalSince1970: sqlite3_column_double(row, 3)),
+                                  seconds: Int(sqlite3_column_int64(row, 4) - sqlite3_column_int64(row, 3)))
+            }
+        }
+    }
+
     static func projectSeconds(from sqliteURL: URL) -> [String: Int]? {
         withDatabase(sqliteURL) { database in
             let sql = """
                 SELECT project_name,
-                       SUM(CASE WHEN is_running = 1 THEN
+                       SUM(CASE WHEN is_running = 1 AND id = (
+                           SELECT id FROM time_entries WHERE source_kind = 'toggl' ORDER BY start_at_utc DESC LIMIT 1
+                       ) THEN
                            MAX(duration_seconds, unixepoch('now') - unixepoch(start_at_utc))
                            ELSE duration_seconds END)
                 FROM time_entries

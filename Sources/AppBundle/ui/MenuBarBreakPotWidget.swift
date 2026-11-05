@@ -56,6 +56,17 @@ enum MenuBarFocusRecord {
         }.max()
     }
 
+    static func latestBreak(overridesJSON: String, now: Date, calendar: Calendar = .current) -> Date? {
+        let contents = try? String(contentsOf: menuBarFocusRecordURL, encoding: .utf8)
+        var days = Set(contents.flatMap { runs(in: $0, calendar: calendar) }?.map(\.date) ?? [])
+        let overrides = (try? JSONDecoder().decode([String: Bool].self, from: Data(overridesJSON.utf8))) ?? [:]
+        for (key, enabled) in overrides {
+            guard let day = date(from: key, calendar: calendar) else { continue }
+            if enabled { days.insert(day) } else { days.remove(day) }
+        }
+        return days.filter { $0 <= now }.max()
+    }
+
     static func recordedDatesInMonth(
         at url: URL = menuBarFocusRecordURL,
         now: Date = .now,

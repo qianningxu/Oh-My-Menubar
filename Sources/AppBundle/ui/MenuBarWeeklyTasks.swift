@@ -327,7 +327,18 @@ struct MenuBarWeeklyTasksCapsule: View {
             Text("Show unfinished tasks")
         )
         .background(MenuBarChartHitRegion(kind: .weeklyTasks))
+        .contextMenu { TaskViewOptions() }
         .task { await model.refreshContinuously() }
+    }
+}
+
+private struct TaskViewOptions: View {
+    @AppStorage("tasks.groupByWeek") private var byWeek = false
+    @AppStorage("tasks.currentWeekOnly") private var thisWeek = false
+
+    var body: some View {
+        Button(byWeek ? "Group by project" : "Group by week") { byWeek.toggle() }
+        Toggle("Current week only", isOn: $thisWeek)
     }
 }
 
@@ -337,6 +348,32 @@ struct MenuBarWeeklyTasksPopover: View {
 
     @StateObject private var model = MenuBarWeeklyTasksModel.shared
     @State private var contentHeight: CGFloat = WinMuxSpacing.page
+    @AppStorage("tasks.groupByWeek") private var byWeek = false
+    @AppStorage("tasks.currentWeekOnly") private var thisWeek = false
+
+    private var groups: [MenuBarWeeklyTaskProject] {
+        let snapshot = model.snapshot
+        let week = snapshot.weekStart ..< snapshot.weekEnd
+        func dates(_ task: MenuBarWeeklyTask) -> [Date] {
+            [task.plannedDate, task.deadline].compactMap { $0 }
+        }
+        let visible = snapshot.tasks.filter { !thisWeek || dates($0).contains(where: week.contains) }
+        if !byWeek {
+            return MenuBarWeeklyTasksSnapshot(weekStart: week.lowerBound, weekEnd: week.upperBound, tasks: visible).projects
+        }
+        var calendar = Calendar.current
+        calendar.firstWeekday = 2
+        calendar.minimumDaysInFirstWeek = 4
+        let grouped = Dictionary(grouping: visible) { task -> Date? in
+            let date = dates(task).first { !thisWeek || week.contains($0) }
+            return date.flatMap { calendar.dateInterval(of: .weekOfYear, for: $0)?.start }
+        }
+        return grouped.keys.sorted { ($0 ?? .distantFuture) < ($1 ?? .distantFuture) }.map { start in
+            let name = start.map { "Week of \($0.formatted(.dateTime.day().month(.abbreviated).year()))" } ?? "No date"
+            return MenuBarWeeklyTaskProject(name: name, tasks: grouped[start] ?? [])
+        }
+    }
+
 
     var body: some View {
         ScrollView {
@@ -352,16 +389,16 @@ struct MenuBarWeeklyTasksPopover: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
 
-                if model.snapshot.tasks.isEmpty {
-                    Text("No unfinished tasks.")
+                if groups.isEmpty {
+                    Text(thisWeek ? "No unfinished tasks planned or due this week." : "No unfinished tasks.")
                         .font(.system(size: menuBarWidgetFontSize))
                         .foregroundStyle(workspaceSidebarWidgetContent(.secondary))
                         .fixedSize(horizontal: false, vertical: true)
                         .frame(maxWidth: .infinity, alignment: .topLeading)
                 } else {
                     VStack(alignment: .leading, spacing: WinMuxSpacing.section) {
-                        ForEach(model.snapshot.projects) { project in
-                            MenuBarWeeklyTaskProjectSection(project: project, model: model)
+                        ForEach(groups) { project in
+                            MenuBarWeeklyTaskProjectSection(project: project, showProjectTime: !byWeek, model: model)
                         }
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -377,6 +414,8 @@ struct MenuBarWeeklyTasksPopover: View {
                 }
             }
         }
+        .contentShape(Rectangle())
+        .contextMenu { TaskViewOptions() }
         .frame(height: min(contentHeight, maximumHeight))
         .onPreferenceChange(MenuBarWeeklyTasksContentHeight.self) { height in
             let fittedHeight = min(ceil(height), maximumHeight)
@@ -398,6 +437,7 @@ private struct MenuBarWeeklyTasksContentHeight: PreferenceKey {
 
 private struct MenuBarWeeklyTaskProjectSection: View {
     let project: MenuBarWeeklyTaskProject
+    let showProjectTime: Bool
     @ObservedObject var model: MenuBarWeeklyTasksModel
 
     var body: some View {
@@ -407,10 +447,12 @@ private struct MenuBarWeeklyTaskProjectSection: View {
                     .font(.system(size: menuBarWidgetFontSize, weight: .semibold))
                     .foregroundStyle(workspaceSidebarWidgetContent(.primary))
                 Spacer(minLength: WinMuxSpacing.compact)
-                Text(model.trackedTime(forProject: project.name))
+                if showProjectTime {
+                    Text(model.trackedTime(forProject: project.name))
                     .help("Total time tracked in Toggl for this project")
                     .font(.system(size: menuBarWidgetFontSize * 0.8, weight: .medium, design: .monospaced))
                     .foregroundStyle(workspaceSidebarWidgetContent(.secondary))
+                }
             }
 
             VStack(alignment: .leading, spacing: WinMuxSpacing.compact) {
