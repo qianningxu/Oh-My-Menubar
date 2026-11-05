@@ -3,7 +3,7 @@ import Foundation
 import XCTest
 
 final class MenuBarWeeklyTasksTest: XCTestCase {
-    func testIncludesUnfinishedEarlierTasksAndRefreshesAfterCompletion() throws {
+    func testIncludesAllUnfinishedTasksAndRefreshesAfterCompletion() throws {
         let vaultURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: vaultURL) }
         let tasksURL = vaultURL.appendingPathComponent("Others/Tasks")
@@ -49,8 +49,9 @@ final class MenuBarWeeklyTasksTest: XCTestCase {
 
         XCTAssertEqual(snapshot.tasks.map(\.title), [
             "Old unfinished", "Previous Sunday unfinished", "Monday unfinished", "Sunday unfinished",
+            "Next Monday unfinished", "Undated unfinished",
         ])
-        XCTAssertEqual(snapshot.totalCount, 4)
+        XCTAssertEqual(snapshot.totalCount, 6)
         XCTAssertEqual(snapshot.completedCount, 0)
         XCTAssertEqual(snapshot.projects.map(\.name), ["Older", "Recent", "Study"])
         let timedDeadlineTask = try XCTUnwrap(snapshot.tasks.first { $0.title == "Monday unfinished" })
@@ -67,9 +68,9 @@ final class MenuBarWeeklyTasksTest: XCTestCase {
         try writeTask("Old unfinished", planned: "2025-01-01", completed: true, project: "Older")
         let refreshed = loader.load(now: now)
         XCTAssertEqual(refreshed.tasks.map(\.title), [
-            "Previous Sunday unfinished", "Monday unfinished", "Sunday unfinished",
+            "Previous Sunday unfinished", "Monday unfinished", "Sunday unfinished", "Next Monday unfinished", "Undated unfinished",
         ])
-        XCTAssertEqual(refreshed.totalCount, 3)
+        XCTAssertEqual(refreshed.totalCount, 5)
         XCTAssertEqual(refreshed.completedCount, 0)
         XCTAssertEqual(refreshed.projects.map(\.name), ["Recent", "Study"])
     }

@@ -293,16 +293,11 @@ private struct MenuBarStatusWidgetGroup: View {
             let surfaceHeight = max(1, geometry.size.height - menuBarContentTopInset)
             let widgetHeight = max(1, surfaceHeight - WinMuxBarStyle.topBarContentInset * 2)
             VStack(spacing: standardGap * 0) {
-                TimelineView(.periodic(from: .now, by: menuBarProjectProgressRefreshInterval)) { context in
-                    let projects = menuBarVisibleProjectProgress(
-                        MenuBarProjectProgressLoader(
-                            baseURL: URL(filePath: menuBarProjectsBasePath)
-                        ).load(now: context.date)
-                    )
+                TimelineView(.periodic(from: .now, by: menuBarProjectProgressRefreshInterval)) { _ in
                     MenuBarProjectLeadingWidgetLayout(
                         separation: menuBarWidgetGroupSpacing,
                         projectSeparation: standardGap * 0.75,
-                        projectCount: projects.count,
+                        projectCount: 0,
                         cameraSafeEdges: cameraSafeEdges.map {
                             ($0.lowerBound - menuBarSurfaceHorizontalInset - WinMuxBarStyle.topBarContentInset)
                                 ...
@@ -310,13 +305,6 @@ private struct MenuBarStatusWidgetGroup: View {
                         }
                     ) {
                         MenuBarPeriodCapsule(height: widgetHeight)
-
-                        ForEach(projects) { project in
-                            MenuBarProjectProgressCapsule(
-                                project: project,
-                                height: widgetHeight
-                            )
-                        }
 
                         MenuBarWeeklyTasksCapsule(height: widgetHeight)
 
@@ -534,7 +522,7 @@ final class MenuBarChartHitRegionView: NSView {
     private func updateAccessibilityLabel() {
         switch kind {
             case .focusRuns: setAccessibilityLabel("Show this month's focus calendar")
-            case .weeklyTasks: setAccessibilityLabel("Show this week's and overdue tasks")
+            case .weeklyTasks: setAccessibilityLabel("Show unfinished tasks")
             case .sleep: setAccessibilityLabel("Show sleep chart")
             case .spending: setAccessibilityLabel("Show spending chart")
         }

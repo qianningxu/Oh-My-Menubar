@@ -7,7 +7,7 @@ struct MenuBarWeeklyTask: Identifiable, Equatable {
     let fileURL: URL
     let title: String
     let projectName: String
-    let plannedDate: Date
+    let plannedDate: Date?
     let deadline: Date?
     let deadlineIncludesTime: Bool
     let estimatedHours: Double?
@@ -36,8 +36,8 @@ struct MenuBarWeeklyTasksSnapshot: Equatable {
         Dictionary(grouping: tasks, by: \.projectName)
             .map { MenuBarWeeklyTaskProject(name: $0.key, tasks: $0.value) }
             .sorted {
-                let firstDate = $0.tasks.map(\.plannedDate).min() ?? .distantFuture
-                let secondDate = $1.tasks.map(\.plannedDate).min() ?? .distantFuture
+                let firstDate = $0.tasks.compactMap(\.plannedDate).min() ?? .distantFuture
+                let secondDate = $1.tasks.compactMap(\.plannedDate).min() ?? .distantFuture
                 if firstDate != secondDate { return firstDate < secondDate }
                 return $0.name.localizedStandardCompare($1.name) == .orderedDescending
             }
@@ -75,13 +75,12 @@ struct MenuBarWeeklyTasksLoader {
 
             for case let taskURL as URL in enumerator where taskURL.pathExtension.caseInsensitiveCompare("md") == .orderedSame {
                 guard let contents = try? String(contentsOf: taskURL, encoding: .utf8),
-                      let frontmatter = ProjectFrontmatter(contents: contents),
-                      let plannedDate = frontmatter.date(for: "planed")
+                      let frontmatter = ProjectFrontmatter(contents: contents)
                 else { continue }
 
-                let plannedDay = calendar.startOfDay(for: plannedDate)
+                let plannedDate = frontmatter.date(for: "planed")
                 let isCompleted = frontmatter.bool(for: "completed")
-                guard !isCompleted, plannedDay < week.end else { continue }
+                guard !isCompleted else { continue }
 
                 let projectName = frontmatter.values(for: "project").first.map(frontmatter.linkDisplayName) ?? "Unassigned"
                 tasks.append(
@@ -100,7 +99,7 @@ struct MenuBarWeeklyTasksLoader {
         }
 
         tasks.sort {
-            if $0.plannedDate != $1.plannedDate { return $0.plannedDate < $1.plannedDate }
+            if $0.plannedDate != $1.plannedDate { return ($0.plannedDate ?? .distantFuture) < ($1.plannedDate ?? .distantFuture) }
             if $0.projectName != $1.projectName {
                 return $0.projectName.localizedStandardCompare($1.projectName) == .orderedAscending
             }
@@ -301,7 +300,7 @@ struct MenuBarWeeklyTasksCapsule: View {
         .menuBarWidgetItem(height: height, chartKind: .weeklyTasks)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(
-            Text("This week and overdue: \(model.snapshot.totalCount) tasks left")
+            Text("\(model.snapshot.totalCount) unfinished tasks")
         )
         .background(MenuBarChartHitRegion(kind: .weeklyTasks))
         .task { await model.refreshContinuously() }
@@ -330,7 +329,7 @@ struct MenuBarWeeklyTasksPopover: View {
                 }
 
                 if model.snapshot.tasks.isEmpty {
-                    Text("No unfinished tasks planned this week or earlier.")
+                    Text("No unfinished tasks.")
                         .font(.system(size: menuBarWidgetFontSize))
                         .foregroundStyle(workspaceSidebarWidgetContent(.secondary))
                         .fixedSize(horizontal: false, vertical: true)
@@ -427,26 +426,32 @@ private struct MenuBarWeeklyTaskRow: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
 
             TimelineView(.periodic(from: .now, by: 60)) { context in
-                let isPast = Calendar.current.startOfDay(for: task.plannedDate)
-                    < Calendar.current.startOfDay(for: context.date)
+                let isPast = task.plannedDate.map { Calendar.current.startOfDay(for: $0)
+                    < Calendar.current.startOfDay(for: context.date) } ?? false
                 let rangeFormat: Date.FormatStyle = .dateTime.day().month(.abbreviated)
                     .locale(Locale(identifier: "en_GB"))
-                let plannedText = task.deadline == nil
-                    ? task.plannedDate.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day())
-                    : task.plannedDate.formatted(rangeFormat)
+                let plannedText = task.plannedDate.map { date in
+                    task.deadline == nil
+                        ? date.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day())
+                        : date.formatted(rangeFormat)
+                }
                 HStack(spacing: WinMuxSpacing.none) {
-                    Text(plannedText)
+                    if let plannedText {
+                        Text(plannedText)
                         .foregroundStyle(
                             isPast
                                 ? workspaceSidebarWidgetSemanticColor(.red, .color9)
                                 : workspaceSidebarWidgetContent(.secondary)
                         )
+                    }
                     if let deadline = task.deadline {
                         let deadlineIsPast = task.deadlineIncludesTime
                             ? deadline < context.date
                             : Calendar.current.startOfDay(for: deadline) < Calendar.current.startOfDay(for: context.date)
-                        Text(" - ")
-                            .foregroundStyle(workspaceSidebarWidgetContent(.secondary))
+                        if plannedText != nil {
+                            Text(" - ")
+                                .foregroundStyle(workspaceSidebarWidgetContent(.secondary))
+                        }
                         Text(deadline.formatted(rangeFormat))
                             .foregroundStyle(
                                 deadlineIsPast
