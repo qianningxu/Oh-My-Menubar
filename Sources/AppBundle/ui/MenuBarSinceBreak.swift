@@ -82,10 +82,11 @@ struct MenuBarSinceBreakView: View {
                         Circle().trim(from: 0, to: min(1, hours / 10))
                             .stroke(color, style: StrokeStyle(lineWidth: WinMuxSpacing.hairline, lineCap: .round))
                             .rotationEffect(.degrees(-90))
+                        Text(day.day.formatted(.dateTime.weekday(.narrow)))
+                            .font(.system(size: menuBarWidgetFontSize * 0.78, weight: .semibold))
                     }
-                    .frame(width: WinMuxSpacing.panel, height: WinMuxSpacing.panel)
-                    Text(day.day.formatted(.dateTime.weekday(.abbreviated)))
-                        .foregroundStyle(workspaceSidebarWidgetContent(.secondary))
+                    .frame(width: WinMuxSpacing.page - WinMuxSpacing.compact,
+                           height: WinMuxSpacing.page - WinMuxSpacing.compact)
                     Text(wholeHours(day.seconds)).fontWeight(.semibold)
                 }
                 .font(.system(size: menuBarWidgetFontSize * 0.86))
@@ -98,9 +99,11 @@ struct MenuBarSinceBreakView: View {
 
     var body: some View {
         HStack(spacing: WinMuxSpacing.panel) {
-            HStack(spacing: WinMuxSpacing.comfortable) {
-                Text("Today")
-                Text(model.snapshot.today.map(wholeHours) ?? "—").bold()
+            VStack(spacing: WinMuxSpacing.hairline) {
+                HStack(spacing: WinMuxSpacing.comfortable) {
+                    Text("Today")
+                    Text(model.snapshot.today.map(wholeHours) ?? "—").bold()
+                }
                 if let seconds = model.snapshot.today {
                     let hours = Double(seconds) / 3600
                     Capsule()
