@@ -80,26 +80,22 @@ enum SidebarSelfDataStore {
         }
     }
 
-    // The task timer writes the task title as the Toggl description.
-    static func taskSeconds(from sqliteURL: URL) -> [String: [String: Int]]? {
+    static func projectSeconds(from sqliteURL: URL) -> [String: Int]? {
         withDatabase(sqliteURL) { database in
             let sql = """
-                SELECT project_name, description,
+                SELECT project_name,
                        SUM(CASE WHEN is_running = 1 THEN
                            MAX(duration_seconds, unixepoch('now') - unixepoch(start_at_utc))
                            ELSE duration_seconds END)
                 FROM time_entries
-                WHERE source_kind = 'toggl' AND project_name IS NOT NULL AND description IS NOT NULL
-                GROUP BY project_name, description
+                WHERE source_kind = 'toggl' AND project_name IS NOT NULL
+                GROUP BY project_name
                 """
-            let rows = query(database, sql: sql) { statement -> (String, String, Int)? in
-                guard let project = textColumn(statement, 0),
-                      let title = textColumn(statement, 1) else { return nil }
-                return (project, title, Int(sqlite3_column_int64(statement, 2)))
+            let rows = query(database, sql: sql) { statement -> (String, Int)? in
+                guard let project = textColumn(statement, 0) else { return nil }
+                return (project, Int(sqlite3_column_int64(statement, 1)))
             }
-            return rows?.reduce(into: [String: [String: Int]]()) { totals, row in
-                totals[row.0, default: [:]][row.1] = row.2
-            }
+            return rows.map { Dictionary(uniqueKeysWithValues: $0) }
         }
     }
 

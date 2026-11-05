@@ -297,7 +297,7 @@ private struct MenuBarStatusWidgetGroup: View {
                     MenuBarProjectLeadingWidgetLayout(
                         separation: menuBarWidgetGroupSpacing,
                         projectSeparation: standardGap * 0.75,
-                        projectCount: 0,
+                        projectCount: 1, // Keep Tasks beside the period widget.
                         cameraSafeEdges: cameraSafeEdges.map {
                             ($0.lowerBound - menuBarSurfaceHorizontalInset - WinMuxBarStyle.topBarContentInset)
                                 ...
