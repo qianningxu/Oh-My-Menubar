@@ -70,11 +70,12 @@ struct MenuBarSinceBreakView: View {
         model.snapshot.daily.reversed().filter { !Calendar.current.isDateInToday($0.day) }
     }
 
+    private var ringDiameter: CGFloat { max(1, height) }
+
     private func dayRing(date: Date, seconds: Int) -> some View {
         let hours = Double(seconds) / 3600
         let color = workspaceSidebarWidgetSemanticColor(MenuBarFocusCalendarBand.forHours(hours).family, .color7)
-        let diameter = min(WinMuxSpacing.page, max(1, height - WinMuxSpacing.compact))
-        let stroke = min(WinMuxSpacing.compact, diameter / 5)
+        let stroke = min(WinMuxSpacing.compact, ringDiameter / 5)
         return ZStack {
             Circle().strokeBorder(workspaceSidebarWidgetSemanticColor(.gray, .color4), lineWidth: stroke)
             Circle().inset(by: stroke / 2).trim(from: 0, to: min(1, hours / 10))
@@ -83,7 +84,7 @@ struct MenuBarSinceBreakView: View {
             Text(date.formatted(.dateTime.weekday(.narrow)))
                 .font(.system(size: menuBarWidgetFontSize * 0.78, weight: .semibold))
         }
-        .frame(width: diameter, height: diameter)
+        .frame(width: ringDiameter, height: ringDiameter)
         .fixedSize()
     }
 
@@ -109,7 +110,7 @@ struct MenuBarSinceBreakView: View {
             if previousDays.count > 7 {
                 ScrollViewReader { proxy in
                     ScrollView(.horizontal, showsIndicators: false) { dailyStrip }
-                        .frame(width: (WinMuxSpacing.page - WinMuxSpacing.compact) * 7 + WinMuxSpacing.section * 6 + WinMuxSpacing.compact)
+                        .frame(width: ringDiameter * 7 + WinMuxSpacing.section * 6 + WinMuxSpacing.compact)
                         .task(id: previousDays.first?.day) {
                             if let newest = previousDays.first { proxy.scrollTo(newest.day, anchor: .leading) }
                         }
