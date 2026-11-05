@@ -117,6 +117,31 @@ final class MenuBarWeeklyTasksModel: ObservableObject {
     @Published private(set) var feedback: MenuBarWeeklyTasksFeedback?
     @Published private(set) var startingTaskIDs: Set<String> = []
 
+    @Published private var trackedSeconds: [String: [String: Int]]?
+    private var lastTimeRead = Date.distantPast
+
+    func trackedTime(for tasks: [MenuBarWeeklyTask]) -> String {
+        guard let trackedSeconds else { return "—" }
+        let seconds = tasks.reduce(0) { total, task in
+            total + (trackedSeconds[task.projectName]?[task.title] ?? 0)
+        }
+        if seconds < 60 && seconds > 0 { return "\(seconds)s" }
+        let minutes = seconds / 60
+        if minutes < 60 { return "\(minutes)m" }
+        return "\(minutes / 60)h \(minutes % 60)m"
+    }
+
+    private func refreshTrackedTime() async {
+        guard Date.now.timeIntervalSince(lastTimeRead) >= 10 else { return }
+        lastTimeRead = .now
+        let totals = await Task.detached(priority: .utility) {
+            let dataRoot = URL(filePath: defaultWorkspaceSidebarDataPath)
+            guard let url = SidebarSelfDataStore.sqliteURL(for: dataRoot) else { return nil as [String: [String: Int]]? }
+            return SidebarSelfDataStore.taskSeconds(from: url)
+        }.value
+        if totals != trackedSeconds { trackedSeconds = totals }
+    }
+
     private let baseURL = URL(filePath: menuBarProjectsBasePath)
     private var lastRefreshAt = Date.distantPast
     private var feedbackExpiration: Task<Void, Never>?
@@ -128,6 +153,7 @@ final class MenuBarWeeklyTasksModel: ObservableObject {
     func refreshContinuously() async {
         while !Task.isCancelled {
             refresh(now: .now)
+            await refreshTrackedTime()
             do {
                 try await Task.sleep(nanoseconds: UInt64(menuBarWeeklyTasksRefreshInterval * 1_000_000_000))
             } catch {
@@ -293,14 +319,14 @@ struct MenuBarWeeklyTasksCapsule: View {
                 .font(.system(size: menuBarWidgetIconSize, weight: menuBarWidgetFontWeight))
                 .frame(width: menuBarWidgetIconFrame, height: menuBarWidgetIconFrame)
                 .foregroundStyle(menuBarWidgetIcon)
-            Text("Tasks - \(model.snapshot.totalCount) left")
+            Text("Tasks - \(model.trackedTime(for: model.snapshot.tasks))")
                 .font(.system(size: menuBarWidgetFontSize, weight: menuBarWidgetFontWeight))
                 .monospacedDigit()
         }
         .menuBarWidgetItem(height: height, chartKind: .weeklyTasks)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(
-            Text("\(model.snapshot.totalCount) unfinished tasks")
+            Text("Time tracked on unfinished tasks: \(model.trackedTime(for: model.snapshot.tasks))")
         )
         .background(MenuBarChartHitRegion(kind: .weeklyTasks))
         .task { await model.refreshContinuously() }
@@ -383,7 +409,8 @@ private struct MenuBarWeeklyTaskProjectSection: View {
                     .font(.system(size: menuBarWidgetFontSize, weight: .semibold))
                     .foregroundStyle(workspaceSidebarWidgetContent(.primary))
                 Spacer(minLength: WinMuxSpacing.compact)
-                Text("\(project.tasks.count) left")
+                Text(model.trackedTime(for: project.tasks))
+                    .help("Toggl time on the tasks listed below")
                     .font(.system(size: menuBarWidgetFontSize * 0.8, weight: .medium, design: .monospaced))
                     .foregroundStyle(workspaceSidebarWidgetContent(.secondary))
             }
@@ -424,6 +451,12 @@ private struct MenuBarWeeklyTaskRow: View {
                 .strikethrough(task.isCompleted)
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
+
+            Text(model.trackedTime(for: [task]))
+                .font(.system(size: menuBarWidgetFontSize * 0.8, design: .monospaced))
+                .foregroundStyle(workspaceSidebarWidgetContent(.secondary))
+                .fixedSize()
+                .help("Total Toggl time for this task")
 
             TimelineView(.periodic(from: .now, by: 60)) { context in
                 let isPast = task.plannedDate.map { Calendar.current.startOfDay(for: $0)
