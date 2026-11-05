@@ -62,16 +62,55 @@ struct MenuBarSinceBreakView: View {
     @ObservedObject private var model = SinceBreakModel.shared
     @AppStorage("menuBarFocusCalendarRestDayOverrides") private var overrides = "{}"
 
-    var body: some View {
-        HStack(spacing: WinMuxSpacing.compact) {
-            Text("Today  \(model.snapshot.today.map(durationText) ?? "—")")
-            HStack(alignment: .bottom, spacing: WinMuxSpacing.hairline) {
-                ForEach(model.snapshot.daily, id: \.day) { day in
-                Capsule()
-                    .fill(workspaceSidebarWidgetSemanticColor(MenuBarFocusCalendarBand.forHours(Double(day.seconds) / 3600).family, .color7))
-                    .frame(width: WinMuxSpacing.compact, height: max(WinMuxSpacing.hairline, min(1, CGFloat(day.seconds) / 36000) * WinMuxSpacing.panel))
-                    .help("\(day.day.formatted(date: .abbreviated, time: .omitted)): \(durationText(day.seconds))")
+    private func wholeHours(_ seconds: Int) -> String {
+        "\(Int((Double(seconds) / 3600).rounded()))h"
+    }
+
+    private var dailyStrip: some View {
+        HStack(spacing: WinMuxSpacing.section) {
+            ForEach(model.snapshot.daily, id: \.day) { day in
+                let hours = Double(day.seconds) / 3600
+                let color = workspaceSidebarWidgetSemanticColor(MenuBarFocusCalendarBand.forHours(hours).family, .color7)
+                VStack(spacing: WinMuxSpacing.hairline) {
+                    HStack(spacing: WinMuxSpacing.compact) {
+                        Text(day.day.formatted(.dateTime.weekday(.abbreviated)))
+                            .foregroundStyle(workspaceSidebarWidgetContent(.secondary))
+                        Text(wholeHours(day.seconds)).fontWeight(.semibold)
+                    }
+                    .font(.system(size: menuBarWidgetFontSize * 0.86))
+                    Capsule()
+                        .fill(workspaceSidebarWidgetSemanticColor(.gray, .color4))
+                        .overlay(alignment: .leading) {
+                            GeometryReader { geometry in
+                                Capsule().fill(color)
+                                    .frame(width: max(WinMuxSpacing.hairline, geometry.size.width * min(1, hours / 10)))
+                            }
+                        }
+                        .frame(height: WinMuxSpacing.compact)
+                }
+                .frame(width: WinMuxSpacing.page * 2.5)
+                .id(day.day)
+                .help("\(day.day.formatted(date: .abbreviated, time: .omitted)): \(durationText(day.seconds))")
             }
+        }
+    }
+
+    var body: some View {
+        HStack(spacing: WinMuxSpacing.panel) {
+            HStack(spacing: WinMuxSpacing.comfortable) {
+                Text("Today")
+                Text(model.snapshot.today.map(wholeHours) ?? "—").bold()
+            }
+            if model.snapshot.daily.count > 7 {
+                ScrollViewReader { proxy in
+                    ScrollView(.horizontal, showsIndicators: false) { dailyStrip }
+                        .frame(width: WinMuxSpacing.page * 2.5 * 7 + WinMuxSpacing.section * 6)
+                        .task(id: model.snapshot.daily.last?.day) {
+                            if let last = model.snapshot.daily.last { proxy.scrollTo(last.day, anchor: .trailing) }
+                        }
+                }
+            } else {
+                dailyStrip
             }
         }
             .font(.system(size: menuBarWidgetFontSize, weight: menuBarWidgetFontWeight))
