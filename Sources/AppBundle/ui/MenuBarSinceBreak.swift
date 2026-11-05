@@ -75,14 +75,14 @@ struct MenuBarSinceBreakView: View {
     private func dayRing(date: Date, seconds: Int) -> some View {
         let hours = Double(seconds) / 3600
         let color = workspaceSidebarWidgetSemanticColor(MenuBarFocusCalendarBand.forHours(hours).family, .color7)
-        let stroke = min(WinMuxSpacing.comfortable, ringDiameter / 4)
+        let stroke = min(WinMuxSpacing.compact, ringDiameter / 7)
         return ZStack {
             Circle().strokeBorder(workspaceSidebarWidgetSemanticColor(.gray, .color4), lineWidth: stroke)
             Circle().inset(by: stroke / 2).trim(from: 0, to: min(1, hours / 10))
                 .stroke(color, style: StrokeStyle(lineWidth: stroke, lineCap: .round))
                 .rotationEffect(.degrees(-90))
             Text(date.formatted(.dateTime.weekday(.narrow)))
-                .font(.system(size: menuBarWidgetFontSize * 0.78, weight: .semibold))
+                .font(.system(size: min(menuBarWidgetFontSize, ringDiameter * 0.62), weight: .semibold))
         }
         .frame(width: ringDiameter, height: ringDiameter)
         .fixedSize()
