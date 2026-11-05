@@ -70,27 +70,27 @@ struct MenuBarSinceBreakView: View {
         model.snapshot.daily.reversed().filter { !Calendar.current.isDateInToday($0.day) }
     }
 
+    private func dayRing(date: Date, seconds: Int) -> some View {
+        let hours = Double(seconds) / 3600
+        let color = workspaceSidebarWidgetSemanticColor(MenuBarFocusCalendarBand.forHours(hours).family, .color7)
+        return ZStack {
+            Circle().stroke(workspaceSidebarWidgetSemanticColor(.gray, .color4),
+                            lineWidth: WinMuxSpacing.compact)
+            Circle().trim(from: 0, to: min(1, hours / 10))
+                .stroke(color, style: StrokeStyle(lineWidth: WinMuxSpacing.compact, lineCap: .round))
+                .rotationEffect(.degrees(-90))
+            Text(date.formatted(.dateTime.weekday(.narrow)))
+                .font(.system(size: menuBarWidgetFontSize * 0.78, weight: .semibold))
+        }
+        .frame(width: WinMuxSpacing.page - WinMuxSpacing.compact,
+               height: WinMuxSpacing.page - WinMuxSpacing.compact)
+        .fixedSize()
+    }
+
     private var dailyStrip: some View {
         HStack(spacing: WinMuxSpacing.section) {
             ForEach(previousDays, id: \.day) { day in
-                let hours = Double(day.seconds) / 3600
-                let color = workspaceSidebarWidgetSemanticColor(MenuBarFocusCalendarBand.forHours(hours).family, .color7)
-                HStack(spacing: WinMuxSpacing.comfortable) {
-                    ZStack {
-                        Circle().stroke(workspaceSidebarWidgetSemanticColor(.gray, .color4),
-                                        lineWidth: WinMuxSpacing.hairline)
-                        Circle().trim(from: 0, to: min(1, hours / 10))
-                            .stroke(color, style: StrokeStyle(lineWidth: WinMuxSpacing.hairline, lineCap: .round))
-                            .rotationEffect(.degrees(-90))
-                        Text(day.day.formatted(.dateTime.weekday(.narrow)))
-                            .font(.system(size: menuBarWidgetFontSize * 0.78, weight: .semibold))
-                    }
-                    .frame(width: WinMuxSpacing.page - WinMuxSpacing.compact,
-                           height: WinMuxSpacing.page - WinMuxSpacing.compact)
-                    Text(wholeHours(day.seconds)).fontWeight(.semibold)
-                }
-                .font(.system(size: menuBarWidgetFontSize * 0.86))
-                .fixedSize()
+                dayRing(date: day.day, seconds: day.seconds)
                 .id(day.day)
                 .help("\(day.day.formatted(date: .abbreviated, time: .omitted)): \(durationText(day.seconds))")
             }
@@ -99,27 +99,17 @@ struct MenuBarSinceBreakView: View {
 
     var body: some View {
         HStack(spacing: WinMuxSpacing.panel) {
-            VStack(spacing: WinMuxSpacing.hairline) {
-                HStack(spacing: WinMuxSpacing.comfortable) {
-                    Text("Today")
-                    Text(model.snapshot.today.map(wholeHours) ?? "—").bold()
-                }
+            HStack(spacing: WinMuxSpacing.comfortable) {
+                Text("Today")
+                Text(model.snapshot.today.map(wholeHours) ?? "—").bold()
                 if let seconds = model.snapshot.today {
-                    let hours = Double(seconds) / 3600
-                    Capsule()
-                        .fill(workspaceSidebarWidgetSemanticColor(.gray, .color4))
-                        .overlay(alignment: .leading) {
-                            Capsule()
-                                .fill(workspaceSidebarWidgetSemanticColor(MenuBarFocusCalendarBand.forHours(hours).family, .color7))
-                                .frame(width: WinMuxSpacing.page * 2 * min(1, hours / 10))
-                        }
-                        .frame(width: WinMuxSpacing.page * 2, height: WinMuxSpacing.compact)
+                    dayRing(date: .now, seconds: seconds)
                 }
             }
             if previousDays.count > 7 {
                 ScrollViewReader { proxy in
                     ScrollView(.horizontal, showsIndicators: false) { dailyStrip }
-                        .frame(width: WinMuxSpacing.page * 3 * 7 + WinMuxSpacing.section * 6)
+                        .frame(width: (WinMuxSpacing.page - WinMuxSpacing.compact) * 7 + WinMuxSpacing.section * 6 + WinMuxSpacing.compact)
                         .task(id: previousDays.first?.day) {
                             if let newest = previousDays.first { proxy.scrollTo(newest.day, anchor: .leading) }
                         }
